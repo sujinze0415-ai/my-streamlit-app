@@ -8,12 +8,13 @@ st.progress(50)
 st.header("This is my first step")
 st.image("https://i.17173cdn.com/2fhnvk/YWxqaGBf/cms3/adxJDQbsyhluvuF.png!a-3-480x.png")
 
+st.latex("NAN BEI LV DOU")
 st.video("https://www.youtube.com/watch?v=UJAtXLfR0n8")
+
 st.latex("HAJIMI WAKE UP")
-
 st.video("https://www.youtube.com/watch?v=IEWEiUEPmiM")
-st.latex("TIAO LOU JI")
 
+st.latex("TIAO LOU JI")
 st.video("https://www.youtube.com/watch?v=dztust9BNqE")
 
 st.checkbox("IF YOU LIKE HAJIMI")
