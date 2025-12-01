@@ -199,7 +199,8 @@ def viz1_ai_enhancement_placeholder(fig, df: pd.DataFrame):
     """
     st.markdown("**(AI enhancement for Viz 1 – to be implemented using Copilot.)**")
     # Example minimal display to keep app running:
-    st.plotly_chart(fig, use_container_width=True)
+    if fig is not None:
+        st.plotly_chart(fig, use_container_width=True)
 
 
 # =========================
@@ -259,12 +260,14 @@ def viz2_student_enhancement(fig, df: pd.DataFrame):
     min_eff = float(df["DELIVERY_EFFICIENCY"].min())
     max_eff = float(df["DELIVERY_EFFICIENCY"].max())
 
+    step = (max_eff - min_eff) / 20 if max_eff > min_eff else 1.0
+
     threshold = st.slider(
         "Minimum delivery efficiency to display (Student enhancement):",
         min_value=min_eff,
         max_value=max_eff,
         value=min_eff,
-        step=(max_eff - min_eff) / 20 if max_eff > min_eff else 1.0,
+        step=step,
         key="viz2_threshold",
     )
 
@@ -308,7 +311,6 @@ def viz2_ai_enhancement_placeholder(fig, df: pd.DataFrame):
     - A toggle to switch between DELIVERY_EFFICIENCY and DEFECT_RATES.
     """
     st.markdown("**(AI enhancement for Viz 2 – to be implemented using Copilot.)**")
-    # Keep a simple version:
     if fig is not None:
         st.plotly_chart(fig, use_container_width=True)
 
@@ -505,7 +507,6 @@ def main():
     )
 
     # --- Load data ---
-    # You can adjust this path depending on where you put the file
     csv_path = Path("supply_chain_data_cleaned.csv")
     df = load_data(str(csv_path))
 
@@ -550,7 +551,7 @@ def main():
         st.stop()
 
     # ======================
-    # Layout: 2x2 grid of visualizations
+    # Layout: 2x2 grid of visualizations (student versions)
     # ======================
 
     col1, col2 = st.columns(2)
@@ -558,7 +559,7 @@ def main():
     with col1:
         # Visualization 1 – student version
         viz1_student_enhancement(
-            fig=None,  # base fig not required; function recomputes internally
+            fig=None,
             df=filtered_df,
         )
 
@@ -585,24 +586,13 @@ def main():
             df=filtered_df,
         )
 
-    # You can optionally add a separate section below for the AI-enhanced versions
-    # when you have Copilot code ready, e.g.:
-    st.markdown("---")
-    st.header("AI-generated Enhancements (Placeholders)")
-
-    # Example: call base figs and then pass to AI placeholders
-    base_fig1 = viz1_base_revenue_by_product_type(filtered_df)
-    viz1_ai_enhancement_placeholder(base_fig1, filtered_df)
-
-    base_fig2 = viz2_base_heatmap_efficiency(filtered_df)
-    viz2_ai_enhancement_placeholder(base_fig2, filtered_df)
-
-    base_fig3 = viz3_base_scatter_price_vs_sold(filtered_df)
-    viz3_ai_enhancement_placeholder(base_fig3, filtered_df)
-
-    base_fig4 = viz4_base_donut_cost_by_transport_mode(filtered_df)
-    viz4_ai_enhancement_placeholder(base_fig4, filtered_df)
+    # NOTE:
+    # For now we do NOT render the AI placeholder charts here,
+    # to avoid StreamlitDuplicateElementId errors.
+    # When real Copilot-generated enhancements are ready,
+    # you can create a new section below with separate charts.
 
 
 if __name__ == "__main__":
     main()
+
