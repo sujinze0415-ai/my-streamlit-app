@@ -1,327 +1,307 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
+import numpy as np  # AI-enhanced: used for jitter in scatter
 import plotly.express as px
-import plotly.graph_objects as go
-from pathlib import Path
 
-
+# -----------------------
+# 1. Start dashboard app
+# -----------------------
 st.set_page_config(page_title="Supply Chain Dashboard", layout="wide")
+st.title("Supply Chain Dashboard")
 
 
+# -----------------------
+# 2. Load and clean data
+# -----------------------
 @st.cache_data
-def load_data(csv_path: Path) -> pd.DataFrame:
-	"""Load CSV into DataFrame and do initial cleaning.
+def load_data(path: str) -> pd.DataFrame:
+    df = pd.read_csv(path)
 
-	Assumptions: The CSV is named `supply_chain_data_cleaned.csv` and sits next to this file
-	or in the working directory. Numeric columns may be named in a variety of ways; the
-	loader will try to coerce commonly named numeric columns to numeric types.
-	"""
-	df = pd.read_csv(csv_path)
+    # Drop duplicate rows
+    df = df.drop_duplicates()
 
-	# Drop exact duplicate rows
-	df = df.drop_duplicates()
+    # Convert key numeric columns to numeric types
+    numeric_cols = [
+        "PRICE",
+        "REVENUE_GENERATED",
+        "COSTS",
+        "DEFECT_RATES",
+        "NUMBER_OF_PRODUCTS_SOLD",
+    ]
+    for col in numeric_cols:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
 
-	# Normalize column names to uppercase stripped for mapping convenience
-	cols_upper = {c: c for c in df.columns}
-
-	def find_col(substrings):
-		"""Return first matching column name by checking substrings (case-insensitive)."""
-		s = [c for c in df.columns]
-		for substr in substrings:
-			for c in s:
-				if substr.lower() in c.lower():
-					return c
-		return None
-
-	# Attempt to find key numeric columns
-	price_col = find_col(["price", "unit_price", "unit price"]) 
-	revenue_col = find_col(["revenue", "sales", "total_revenue", "total revenue"]) 
-	costs_col = find_col(["cost", "costs", "expense", "total_cost"]) 
-	defect_col = find_col(["defect_rate", "defect", "defect rate", "defects_pct"]) 
-	qty_col = find_col(["number_of_products_sold", "units_sold", "quantity", "qty", "sold"]) 
-
-	# Try to coerce found columns to numeric, if present
-	for c in [price_col, revenue_col, costs_col, defect_col, qty_col]:
-		if c is not None:
-			df[c] = pd.to_numeric(df[c], errors="coerce")
-
-	# If defect rate found but it's in fraction (0-1), allow average presentation as percent later
-	return df
+    return df
 
 
-def main():
-	# Locate CSV next to this script or in current working directory
-	base = Path(__file__).resolve().parent
-	csv_path = base / "supply_chain_data_cleaned.csv"
-	if not csv_path.exists():
-		# fallback to working directory
-		csv_path = Path("supply_chain_data_cleaned.csv")
+df = load_data("supply_chain_data_cleaned.csv")
 
-	if not csv_path.exists():
-		st.error(f"Could not find supply_chain_data_cleaned.csv at {csv_path}. Put the file in the app folder.")
-		return
-
-	df = load_data(csv_path)
-
-	st.title("Supply Chain Dashboard")
-
-	# Identify commonly used categorical columns
-	def find_col(df, substrings):
-		for substr in substrings:
-			for c in df.columns:
-				if substr.lower() in c.lower():
-					return c
-		return None
-
-	product_col = find_col(df, ["product_type", "product type", "product"]) or "PRODUCT_TYPE"
-	location_col = find_col(df, ["location", "site", "warehouse"]) or "LOCATION"
-	transport_col = find_col(df, ["transportation_modes", "transportation mode", "transport"]) or "TRANSPORTATION_MODES"
-	inspect_col = find_col(df, ["inspection_results", "inspection result", "inspection"]) or "INSPECTION_RESULTS"
-	customer_demo_col = find_col(df, ["customer_demographics", "customer demo", "demographics"]) or "CUSTOMER_DEMOGRAPHICS"
-
-	# Provide sidebar filters
-	st.sidebar.header("Filters")
-
-	# Multiselect helpers that tolerate missing columns
-	def multiselect_for(col, label):
-		if col in df.columns:
-			opts = sorted(df[col].dropna().unique().tolist())
-			return st.sidebar.multiselect(label, options=opts, default=opts)
-		else:
-			return None
-
-	selected_products = multiselect_for(product_col, "Product Type")
-	selected_locations = multiselect_for(location_col, "Location")
-	selected_transports = multiselect_for(transport_col, "Transportation Modes")
-	selected_inspections = multiselect_for(inspect_col, "Inspection Results")
-
-	# Price range slider
-	# Try to find a price column
-	price_candidates = [c for c in df.columns if "price" in c.lower()]
-	price_col = price_candidates[0] if price_candidates else None
-	if price_col and pd.api.types.is_numeric_dtype(df[price_col]):
-		min_p = float(df[price_col].min(skipna=True))
-		max_p = float(df[price_col].max(skipna=True))
-		price_min, price_max = st.sidebar.slider("Price range", min_value=min_p, max_value=max_p, value=(min_p, max_p))
-	else:
-		price_min, price_max = None, None
-
-	# Bar chart metric selection
-	metric_choice = st.sidebar.selectbox("Bar chart metric", ["Total Revenue", "Total Costs", "Total Profit"]) 
-
-	# Scatter: min products sold
-	qty_candidates = [c for c in df.columns if any(x in c.lower() for x in ["sold", "quantity", "units", "number_of_products"])]
-	qty_col = qty_candidates[0] if qty_candidates else None
-	min_sold = int(st.sidebar.number_input("Minimum number of products sold (for scatter)", min_value=0, value=0))
-
-	# Donut category choice
-	donut_options = [opt for opt in [inspect_col, customer_demo_col] if opt in df.columns]
-	if not donut_options:
-		donut_options = []
-	donut_choice = st.sidebar.selectbox("Donut category", options=donut_options if donut_options else ["None"])
-
-	# Apply filters to create filtered_df
-	filtered = df.copy()
-	# Apply product filter
-	if selected_products is not None and product_col in filtered.columns:
-		filtered = filtered[filtered[product_col].isin(selected_products)]
-	if selected_locations is not None and location_col in filtered.columns:
-		filtered = filtered[filtered[location_col].isin(selected_locations)]
-	if selected_transports is not None and transport_col in filtered.columns:
-		filtered = filtered[filtered[transport_col].isin(selected_transports)]
-	if selected_inspections is not None and inspect_col in filtered.columns:
-		filtered = filtered[filtered[inspect_col].isin(selected_inspections)]
-	if price_col and price_min is not None:
-		filtered = filtered[(filtered[price_col] >= price_min) & (filtered[price_col] <= price_max)]
-
-	# If no rows after filtering, show warning and stop
-	if filtered.empty:
-		st.warning("No data after applying filters. Try expanding the filters.")
-		st.stop()
-
-	# KPIs
-	# Try to find revenue and costs columns
-	rev_candidates = [c for c in df.columns if "revenue" in c.lower() or "sales" in c.lower()]
-	rev_col = rev_candidates[0] if rev_candidates else None
-	cost_candidates = [c for c in df.columns if "cost" in c.lower()]
-	cost_col = cost_candidates[0] if cost_candidates else None
-	defect_candidates = [c for c in df.columns if "defect" in c.lower()]
-	defect_col = defect_candidates[0] if defect_candidates else None
-
-	total_rev = filtered[rev_col].sum() if rev_col in filtered.columns else np.nan
-	total_costs = filtered[cost_col].sum() if cost_col in filtered.columns else np.nan
-	total_profit = (total_rev - total_costs) if (not np.isnan(total_rev) and not np.isnan(total_costs)) else np.nan
-	avg_defect = filtered[defect_col].mean() if defect_col in filtered.columns else np.nan
-
-	# Compute deltas relative to the full dataset totals (for quick context)
-	overall_rev = df[rev_col].sum() if rev_col in df.columns else np.nan
-	overall_costs = df[cost_col].sum() if cost_col in df.columns else np.nan
-	overall_profit = (overall_rev - overall_costs) if (not np.isnan(overall_rev) and not np.isnan(overall_costs)) else np.nan
-
-	def pct_delta(current, baseline):
-		try:
-			if np.isnan(current) or np.isnan(baseline) or baseline == 0:
-				return None
-			return (current - baseline) / abs(baseline)
-		except Exception:
-			return None
-
-	rev_delta = pct_delta(total_rev, overall_rev)
-	costs_delta = pct_delta(total_costs, overall_costs)
-	profit_delta = pct_delta(total_profit, overall_profit)
-
-	k1, k2, k3, k4 = st.columns(4)
-	k1.metric("Total Revenue", f"${total_rev:,.0f}" if not np.isnan(total_rev) else "N/A", delta=f"{rev_delta:+.1%}" if rev_delta is not None else None)
-	k2.metric("Total Costs", f"${total_costs:,.0f}" if not np.isnan(total_costs) else "N/A", delta=f"{costs_delta:+.1%}" if costs_delta is not None else None)
-	k3.metric("Total Profit", f"${total_profit:,.0f}" if not np.isnan(total_profit) else "N/A", delta=f"{profit_delta:+.1%}" if profit_delta is not None else None)
-	# Format defect as percent if looks like 0-1
-	if not np.isnan(avg_defect):
-		if avg_defect <= 1:
-			k4.metric("Avg Defect Rate", f"{avg_defect*100:.2f}%", delta=None)
-		else:
-			k4.metric("Avg Defect Rate", f"{avg_defect:.2f}", delta=None)
-	else:
-		k4.metric("Avg Defect Rate", "N/A")
-
-	# small caption about row count
-	st.caption(f"Showing {len(filtered):,} rows — dataset total {len(df):,} rows")
-
-	st.markdown("---")
-
-	# Layout: left column charts and right column heatmap/donut
-	left, right = st.columns((2, 1))
-
-	# Bar chart by PRODUCT_TYPE — improved with labels and sorting
-	with left:
-		st.subheader("Bar chart by Product Type")
-		if product_col in filtered.columns:
-			grp = filtered.groupby(product_col)
-			if metric_choice == "Total Revenue":
-				series = grp[rev_col].sum() if rev_col in filtered.columns else pd.Series([])
-				y_label = "Revenue"
-			elif metric_choice == "Total Costs":
-				series = grp[cost_col].sum() if cost_col in filtered.columns else pd.Series([])
-				y_label = "Costs"
-			else:
-				# profit
-				if rev_col in filtered.columns and cost_col in filtered.columns:
-					series = grp[rev_col].sum() - grp[cost_col].sum()
-				else:
-					series = pd.Series([])
-				y_label = "Profit"
-
-			bar_df = series.reset_index()
-			bar_df.columns = [product_col, "value"]
-			bar_df = bar_df.sort_values("value", ascending=False)
-			# Add count per product for hover
-			counts = filtered[product_col].value_counts().reindex(bar_df[product_col]).fillna(0).values
-			bar_df["count"] = counts
-			fig_bar = px.bar(
-				bar_df,
-				x=product_col,
-				y="value",
-				text="value",
-				hover_data={product_col: True, "value": ":,.0f", "count": True},
-				labels={"value": y_label, product_col: "Product Type"},
-				color=product_col,
-				color_discrete_sequence=px.colors.qualitative.Set2,
-			)
-			fig_bar.update_traces(texttemplate='%{text:,.0f}', textposition='outside', showlegend=False)
-			fig_bar.update_layout(uniformtext_minsize=8, uniformtext_mode='hide', yaxis_title=y_label, xaxis_tickangle=-45, height=450)
-			st.plotly_chart(fig_bar, use_container_width=True)
-		else:
-			st.info("No product type column found for bar chart.")
-
-		st.subheader("Costs vs Revenue (scatter)")
-		if (cost_col in filtered.columns) and (rev_col in filtered.columns):
-			scatter_df = filtered.copy()
-			if qty_col and qty_col in scatter_df.columns:
-				scatter_df = scatter_df[scatter_df[qty_col] >= min_sold]
-
-			if scatter_df.empty:
-				st.info("No data for scatter after applying minimum products sold filter.")
-			else:
-				# detect SKU column for richer hover
-				sku_col = find_col(df, ["sku", "product_sku", "product code", "item_id", "product_code"]) or "SKU"
-				hover_cols = []
-				if product_col in scatter_df.columns:
-					hover_cols.append(product_col)
-				if location_col in scatter_df.columns:
-					hover_cols.append(location_col)
-				if sku_col in scatter_df.columns:
-					hover_cols.append(sku_col)
-
-				size = scatter_df[qty_col] if (qty_col and qty_col in scatter_df.columns) else None
-				fig_scatter = px.scatter(
-					scatter_df,
-					x=cost_col,
-					y=rev_col,
-					color=product_col if product_col in scatter_df.columns else None,
-					size=size,
-					size_max=18,
-					hover_data=hover_cols if hover_cols else None,
-					labels={cost_col: "Costs", rev_col: "Revenue"},
-					color_discrete_sequence=px.colors.qualitative.Dark24,
-				)
-				# Add 1:1 reference line
-				min_xy = min(scatter_df[cost_col].min(), scatter_df[rev_col].min())
-				max_xy = max(scatter_df[cost_col].max(), scatter_df[rev_col].max())
-				fig_scatter.add_shape(type="line", x0=min_xy, y0=min_xy, x1=max_xy, y1=max_xy, line=dict(dash='dash', color='gray'))
-				fig_scatter.update_layout(height=450)
-				st.plotly_chart(fig_scatter, use_container_width=True)
-		else:
-			st.info("Revenue or Costs column not found for scatter plot.")
-
-	# Right column: heatmap and donut
-	with right:
-		st.subheader("Heatmap: Avg Defect Rate")
-		if (location_col in filtered.columns) and (transport_col in filtered.columns) and (defect_col in filtered.columns):
-			heat = filtered.groupby([location_col, transport_col])[defect_col].mean().reset_index()
-			pivot = heat.pivot(index=location_col, columns=transport_col, values=defect_col).fillna(0)
-			z = pivot.values
-			x = pivot.columns.astype(str)
-			y = pivot.index.astype(str)
-			fig_heat = go.Figure(data=go.Heatmap(z=z, x=x, y=y, colorscale="Viridis", colorbar=dict(title="Avg Defect")))
-			# Add annotations with formatted percent when 0-1
-			annotations = []
-			for i, yi in enumerate(y):
-				for j, xj in enumerate(x):
-					val = z[i][j]
-					if np.isnan(val):
-						txt = "-"
-					else:
-						txt = f"{val*100:.1f}%" if val <= 1 else f"{val:.2f}"
-					annotations.append(dict(x=xj, y=yi, text=txt, showarrow=False, font=dict(color='white' if val > z.max()/2 else 'black')))
-			fig_heat.update_layout(annotations=annotations, xaxis_title=transport_col, yaxis_title=location_col, height=420)
-			st.plotly_chart(fig_heat, use_container_width=True)
-		else:
-			st.info("Require LOCATION, TRANSPORTATION_MODES and a defect rate column for heatmap.")
-
-		st.subheader("Donut chart")
-		if donut_choice and donut_choice in filtered.columns:
-			vc = filtered[donut_choice].value_counts(dropna=False)
-			donut_df = vc.reset_index()
-			donut_df.columns = [donut_choice, "count"]
-			donut_df["pct"] = donut_df["count"] / donut_df["count"].sum()
-			# Group small slices into 'Other' (less than 3%)
-			thresh = 0.03
-			large = donut_df[donut_df["pct"] >= thresh].copy()
-			small = donut_df[donut_df["pct"] < thresh]
-			if not small.empty:
-				other = pd.DataFrame({donut_choice: ["Other"], "count": [small["count"].sum()]})
-				other["pct"] = other["count"] / donut_df["count"].sum()
-				plot_df = pd.concat([large, other], ignore_index=True)
-			else:
-				plot_df = large
-
-			fig_donut = go.Figure(data=[go.Pie(labels=plot_df[donut_choice], values=plot_df["count"], hole=0.55)])
-			fig_donut.update_traces(textinfo='percent+label', hovertemplate='%{label}: %{value} (%{percent})')
-			fig_donut.update_layout(height=400)
-			st.plotly_chart(fig_donut, use_container_width=True)
-		else:
-			st.info("No category selected or column missing for donut chart.")
+required_cols = [
+    "PRODUCT_TYPE",
+    "LOCATION",
+    "TRANSPORTATION_MODES",
+    "INSPECTION_RESULTS",
+    "CUSTOMER_DEMOGRAPHICS",
+    "PRICE",
+    "REVENUE_GENERATED",
+    "COSTS",
+    "DEFECT_RATES",
+    "NUMBER_OF_PRODUCTS_SOLD",
+]
+missing = [c for c in required_cols if c not in df.columns]
+if missing:
+    st.error(f"Missing required columns in CSV: {missing}")
+    st.stop()
 
 
-if __name__ == "__main__":
-	main()
+# -------------------------------
+# 3. Create global filters
+# -------------------------------
+st.sidebar.header("Filters")
+
+# PRODUCT_TYPE filter
+product_options = sorted(df["PRODUCT_TYPE"].dropna().unique())
+selected_products = st.sidebar.multiselect(
+    "Product Type", options=product_options, default=product_options
+)
+
+# LOCATION filter
+location_options = sorted(df["LOCATION"].dropna().unique())
+selected_locations = st.sidebar.multiselect(
+    "Location", options=location_options, default=location_options
+)
+
+# TRANSPORTATION_MODES filter
+transport_options = sorted(df["TRANSPORTATION_MODES"].dropna().unique())
+selected_transports = st.sidebar.multiselect(
+    "Transportation Modes", options=transport_options, default=transport_options
+)
+
+# INSPECTION_RESULTS filter
+inspect_options = sorted(df["INSPECTION_RESULTS"].dropna().unique())
+selected_inspections = st.sidebar.multiselect(
+    "Inspection Results", options=inspect_options, default=inspect_options
+)
+
+# Price range slider
+min_price = float(df["PRICE"].min())
+max_price = float(df["PRICE"].max())
+price_min, price_max = st.sidebar.slider(
+    "Price range",
+    min_value=min_price,
+    max_value=max_price,
+    value=(min_price, max_price),
+)
+
+# Min number of products sold (for scatter plot)
+min_sold = st.sidebar.number_input(
+    "Minimum NUMBER_OF_PRODUCTS_SOLD (for scatter plot)",
+    min_value=0,
+    value=0,
+)
+
+# Donut chart category choice
+donut_category = st.sidebar.selectbox(
+    "Donut category",
+    options=["INSPECTION_RESULTS", "CUSTOMER_DEMOGRAPHICS"],
+)
+
+
+# Apply all filters to create filtered_df
+filtered_df = df.copy()
+filtered_df = filtered_df[filtered_df["PRODUCT_TYPE"].isin(selected_products)]
+filtered_df = filtered_df[filtered_df["LOCATION"].isin(selected_locations)]
+filtered_df = filtered_df[filtered_df["TRANSPORTATION_MODES"].isin(selected_transports)]
+filtered_df = filtered_df[filtered_df["INSPECTION_RESULTS"].isin(selected_inspections)]
+filtered_df = filtered_df[
+    (filtered_df["PRICE"] >= price_min) & (filtered_df["PRICE"] <= price_max)
+]
+
+# If no rows after filtering, show warning and stop
+if filtered_df.empty:
+    st.warning("No data after applying filters. Please relax the filter settings.")
+    st.stop()
+
+
+# -------------------------------
+# 4. Show KPI summary
+# -------------------------------
+total_revenue = filtered_df["REVENUE_GENERATED"].sum()
+total_costs = filtered_df["COSTS"].sum()
+total_profit = total_revenue - total_costs
+avg_defect_rate = filtered_df["DEFECT_RATES"].mean()
+
+kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+# AI-enhanced: show delta vs the full (unfiltered) dataset to give context
+base_total_revenue = df["REVENUE_GENERATED"].sum()
+base_total_costs = df["COSTS"].sum()
+base_total_profit = base_total_revenue - base_total_costs
+base_avg_defect = df["DEFECT_RATES"].mean()
+
+def _format_delta(curr, base):
+    try:
+        pct = (curr - base) / base
+    except Exception:
+        pct = 0
+    return f"{pct:+.1%}"
+
+kpi1.metric("Total Revenue", f"{total_revenue:,.2f}", delta=_format_delta(total_revenue, base_total_revenue))
+kpi2.metric("Total Costs", f"{total_costs:,.2f}", delta=_format_delta(total_costs, base_total_costs))
+kpi3.metric("Total Profit", f"{total_profit:,.2f}", delta=_format_delta(total_profit, base_total_profit))
+kpi4.metric("Average Defect Rate", f"{avg_defect_rate * 100:.2f}%", delta=_format_delta(avg_defect_rate, base_avg_defect))
+
+st.markdown("---")
+
+
+# -------------------------------
+# 5. Bar chart by PRODUCT_TYPE
+# -------------------------------
+st.subheader("Bar Chart by Product Type")
+
+# AI-enhanced: allow sorting bars and show value labels
+metric_option = st.selectbox(
+    "Select metric for bar chart",
+    options=["Total Revenue", "Total Costs", "Total Profit"],
+)
+sort_bars = st.checkbox("Sort bars by value (descending)", value=True)
+
+grouped = filtered_df.groupby("PRODUCT_TYPE")
+
+if metric_option == "Total Revenue":
+    bar_data = grouped["REVENUE_GENERATED"].sum().reset_index(name="VALUE")
+elif metric_option == "Total Costs":
+    bar_data = grouped["COSTS"].sum().reset_index(name="VALUE")
+else:  # Total Profit
+    bar_data = (
+        grouped["REVENUE_GENERATED"].sum()
+        - grouped["COSTS"].sum()
+    ).reset_index(name="VALUE")
+
+if sort_bars:
+    bar_data = bar_data.sort_values("VALUE", ascending=False)
+
+bar_fig = px.bar(
+    bar_data,
+    x="PRODUCT_TYPE",
+    y="VALUE",
+    labels={"PRODUCT_TYPE": "Product Type", "VALUE": metric_option},
+    text_auto=True,  # AI-enhanced: show values on bars
+)
+bar_fig.update_layout(margin=dict(t=30, b=30))
+st.plotly_chart(bar_fig, use_container_width=True)
+
+
+# -------------------------------
+# 6. Scatter plot: costs vs revenue
+# -------------------------------
+st.subheader("Scatter Plot: Costs vs Revenue")
+
+# AI-enhanced: provide jitter controls to reduce overplotting
+scatter_df = filtered_df.copy()
+scatter_df = scatter_df[scatter_df["NUMBER_OF_PRODUCTS_SOLD"] >= min_sold]
+
+if scatter_df.empty:
+    st.info("No data for scatter plot after applying minimum NUMBER_OF_PRODUCTS_SOLD.")
+else:
+    jitter_apply = st.checkbox("Apply jitter to points to reduce overplotting", value=False)
+    jitter_frac = st.slider("Jitter fraction (fraction of axis range)", min_value=0.0, max_value=0.2, value=0.02, step=0.005)
+
+    x_col = "COSTS"
+    y_col = "REVENUE_GENERATED"
+
+    # prepare hover columns (show original values even if jitter applied)
+    hover_cols = ["SKU", "LOCATION"]
+    hover_cols = [c for c in hover_cols if c in scatter_df.columns]
+
+    # Apply jitter reproducibly
+    if jitter_apply and not scatter_df[[x_col, y_col]].dropna().empty:
+        rng = np.random.default_rng(42)
+        x_range = scatter_df[x_col].max() - scatter_df[x_col].min()
+        y_range = scatter_df[y_col].max() - scatter_df[y_col].min()
+        x_noise = rng.normal(0, jitter_frac * (x_range if x_range != 0 else 1), size=len(scatter_df))
+        y_noise = rng.normal(0, jitter_frac * (y_range if y_range != 0 else 1), size=len(scatter_df))
+        scatter_df["_x_plot"] = scatter_df[x_col] + x_noise
+        scatter_df["_y_plot"] = scatter_df[y_col] + y_noise
+    else:
+        scatter_df["_x_plot"] = scatter_df[x_col]
+        scatter_df["_y_plot"] = scatter_df[y_col]
+
+    scatter_fig = px.scatter(
+        scatter_df,
+        x="_x_plot",
+        y="_y_plot",
+        color="PRODUCT_TYPE",
+        size="NUMBER_OF_PRODUCTS_SOLD",
+        hover_data=hover_cols + [x_col, y_col],  # AI-enhanced: include original numeric values in hover
+        labels={"_x_plot": "Costs (possibly jittered)", "_y_plot": "Revenue (possibly jittered)"},
+    )
+    scatter_fig.update_layout(margin=dict(t=30, b=30))
+    st.plotly_chart(scatter_fig, use_container_width=True)
+
+
+# -------------------------------
+# 7. Heatmap of defect rates
+# -------------------------------
+st.subheader("Heatmap of Average Defect Rates")
+
+# AI-enhanced: allow choosing colormap and annotate cells (text_auto)
+heat = (
+    filtered_df.groupby(["LOCATION", "TRANSPORTATION_MODES"])["DEFECT_RATES"]
+    .mean()
+    .reset_index()
+)
+heat_pivot = heat.pivot(
+    index="LOCATION",
+    columns="TRANSPORTATION_MODES",
+    values="DEFECT_RATES",
+)
+
+colormap = st.selectbox("Heatmap color scale", options=["Viridis", "Plasma", "Cividis", "Reds"], index=0)
+heat_fig = px.imshow(
+    heat_pivot,
+    labels=dict(x="Transportation Modes", y="Location", color="Avg Defect Rate"),
+    color_continuous_scale=colormap.lower(),
+    text_auto=True,  # AI-enhanced: annotate each cell with the defect rate
+)
+heat_fig.update_layout(margin=dict(t=30, b=30))
+st.plotly_chart(heat_fig, use_container_width=True)
+
+
+# -------------------------------
+# 8. Donut chart
+# -------------------------------
+st.subheader("Donut Chart")
+
+# AI-enhanced: group small slices into 'Other' via a user-controlled threshold
+small_pct = st.slider("Group categories below this percent into 'Other'", min_value=0.0, max_value=10.0, value=1.0, step=0.5)
+
+donut_series = filtered_df[donut_category].fillna("(missing)")
+donut_counts = (
+    donut_series
+    .value_counts()
+    .reset_index(name="COUNT")
+    .rename(columns={"index": donut_category})
+)
+
+total = donut_counts["COUNT"].sum() if not donut_counts.empty else 0
+if total > 0 and small_pct > 0:
+    donut_counts["PCT"] = donut_counts["COUNT"] / total * 100
+    large = donut_counts[donut_counts["PCT"] >= small_pct].copy()
+    small = donut_counts[donut_counts["PCT"] < small_pct]
+    if not small.empty:
+        other_row = pd.DataFrame([{donut_category: "Other", "COUNT": small["COUNT"].sum()}])
+        donut_counts = pd.concat([large[[donut_category, "COUNT"]], other_row], ignore_index=True)
+    else:
+        donut_counts = large[[donut_category, "COUNT"]]
+
+donut_fig = px.pie(
+    donut_counts,
+    names=donut_category,
+    values="COUNT",
+    hole=0.5,
+)
+donut_fig.update_traces(textposition="inside", textinfo="percent+label")
+donut_fig.update_layout(margin=dict(t=30, b=30))
+st.plotly_chart(donut_fig, use_container_width=True)
+
