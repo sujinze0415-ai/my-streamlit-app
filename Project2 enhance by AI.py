@@ -289,8 +289,10 @@ def main():
 				color_discrete_sequence=px.colors.qualitative.Set2,
 			)
 			fig_bar.update_traces(texttemplate='%{text:,.0f}', textposition='outside', showlegend=False)
-			fig_bar.update_layout(uniformtext_minsize=8, uniformtext_mode='hide', yaxis_title=y_label, xaxis_tickangle=-45, height=450)
+			fig_bar.update_layout(uniformtext_minsize=8, uniformtext_mode='hide', yaxis_title=y_label, xaxis_tickangle=-45, height=520, margin=dict(l=40,r=40,t=60,b=40))
 			st.plotly_chart(fig_bar, use_container_width=True)
+			# spacing
+			st.markdown("<br>", unsafe_allow_html=True)
 		else:
 			st.info("No product type column found for bar chart.")
 
@@ -347,8 +349,9 @@ def main():
 				min_xy = min(scatter_df[cost_col].min(), scatter_df[rev_col].min())
 				max_xy = max(scatter_df[cost_col].max(), scatter_df[rev_col].max())
 				fig_scatter.add_shape(type="line", x0=min_xy, y0=min_xy, x1=max_xy, y1=max_xy, line=dict(dash='dash', color='gray'))
-				fig_scatter.update_layout(height=450)
+				fig_scatter.update_layout(height=520, margin=dict(l=40,r=40,t=60,b=40))
 				st.plotly_chart(fig_scatter, use_container_width=True)
+				st.markdown("<br>", unsafe_allow_html=True)
 		else:
 			st.info("Revenue or Costs column not found for scatter plot.")
 
@@ -388,14 +391,31 @@ def main():
 					else:
 						txt = f"{val*100:.1f}%" if val <= 1 else f"{val:.2f}"
 					annotations.append(dict(x=xj, y=yi, text=txt, showarrow=False, font=dict(color='white' if val > z.max()/2 else 'black')))
-			fig_heat.update_layout(annotations=annotations, xaxis_title=transport_col, yaxis_title=location_col, height=420)
+			fig_heat.update_layout(annotations=annotations, xaxis_title=transport_col, yaxis_title=location_col, height=520, margin=dict(l=40,r=40,t=60,b=40))
 			st.plotly_chart(fig_heat, use_container_width=True)
+			st.markdown("<br>", unsafe_allow_html=True)
 		else:
 			st.info("Require LOCATION, TRANSPORTATION_MODES and a defect rate column for heatmap.")
 
 		st.subheader("Donut chart")
-		if donut_choice and donut_choice in filtered.columns:
-			vc = filtered[donut_choice].value_counts(dropna=False)
+		# Donut: inline local filters
+		exp_donut = st.expander("Donut filters", expanded=False)
+		use_global_donut = exp_donut.checkbox("Use global filters", value=True, key="use_global_donut")
+		prod_sel_donut = loc_sel_donut = trans_sel_donut = insp_sel_donut = None
+		price_range_donut = (price_min, price_max)
+		if not use_global_donut:
+			prod_sel_donut = local_multiselect_for(product_col, "Donut: Product Type", exp_donut, key_suffix="donut_prod")
+			loc_sel_donut = local_multiselect_for(location_col, "Donut: Location", exp_donut, key_suffix="donut_loc")
+			trans_sel_donut = local_multiselect_for(transport_col, "Donut: Transportation Modes", exp_donut, key_suffix="donut_trans")
+			insp_sel_donut = local_multiselect_for(inspect_col, "Donut: Inspection Results", exp_donut, key_suffix="donut_insp")
+			if price_col and pd.api.types.is_numeric_dtype(df[price_col]):
+				pmin = float(df[price_col].min(skipna=True))
+				pmax = float(df[price_col].max(skipna=True))
+				price_range_donut = exp_donut.slider("Donut: Price range", min_value=pmin, max_value=pmax, value=(pmin, pmax), key="price_donut")
+
+		donut_source = filtered if use_global_donut else apply_filters(df, prod_sel_donut, loc_sel_donut, trans_sel_donut, insp_sel_donut, price_range_donut)
+		if donut_choice and donut_choice in donut_source.columns:
+			vc = donut_source[donut_choice].value_counts(dropna=False)
 			donut_df = vc.reset_index()
 			donut_df.columns = [donut_choice, "count"]
 			donut_df["pct"] = donut_df["count"] / donut_df["count"].sum()
@@ -412,7 +432,7 @@ def main():
 
 			fig_donut = go.Figure(data=[go.Pie(labels=plot_df[donut_choice], values=plot_df["count"], hole=0.55)])
 			fig_donut.update_traces(textinfo='percent+label', hovertemplate='%{label}: %{value} (%{percent})')
-			fig_donut.update_layout(height=400)
+			fig_donut.update_layout(height=520, margin=dict(l=40,r=40,t=60,b=40))
 			st.plotly_chart(fig_donut, use_container_width=True)
 		else:
 			st.info("No category selected or column missing for donut chart.")
