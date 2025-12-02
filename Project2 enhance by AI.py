@@ -110,16 +110,15 @@ def main():
 	# Bar chart metric selection
 	metric_choice = st.sidebar.selectbox("Bar chart metric", ["Total Revenue", "Total Costs", "Total Profit"]) 
 
-	# Scatter: min products sold
-	qty_candidates = [c for c in df.columns if any(x in c.lower() for x in ["sold", "quantity", "units", "number_of_products"])]
-	qty_col = qty_candidates[0] if qty_candidates else None
-	min_sold = int(st.sidebar.number_input("Minimum number of products sold (for scatter)", min_value=0, value=0))
-
 	# Donut category choice
 	donut_options = [opt for opt in [inspect_col, customer_demo_col] if opt in df.columns]
 	if not donut_options:
 		donut_options = []
 	donut_choice = st.sidebar.selectbox("Donut category", options=donut_options if donut_options else ["None"])
+
+	# Quantity/units column detection (used for scatter point size)
+	qty_candidates = [c for c in df.columns if any(x in c.lower() for x in ["sold", "quantity", "units", "number_of_products"])]
+	qty_col = qty_candidates[0] if qty_candidates else None
 
 	# Helper to apply a set of filter selections to a dataframe
 	def apply_filters(df_to_filter, prod_sel, loc_sel, trans_sel, insp_sel, price_range_tuple):
@@ -141,30 +140,14 @@ def main():
 	st.sidebar.markdown("---")
 	st.sidebar.header("Per-chart filters")
 
-	# Generic helper to render multiselects within an expander
-	def chart_filters_ui(name, use_default=True):
-		exp = st.sidebar.expander(f"{name} filters", expanded=False)
-		use_global = exp.checkbox("Use global filters", value=use_default, key=f"use_global_{name}")
-		prod_sel = loc_sel = trans_sel = insp_sel = None
-		price_range = (price_min, price_max)
-		if not use_global:
-			with exp:
-				prod_sel = multiselect_for(product_col, f"{name}: Product Type")
-				loc_sel = multiselect_for(location_col, f"{name}: Location")
-				trans_sel = multiselect_for(transport_col, f"{name}: Transportation Modes")
-				insp_sel = multiselect_for(inspect_col, f"{name}: Inspection Results")
-				# price range only if price column exists
-				if price_col and pd.api.types.is_numeric_dtype(df[price_col]):
-					pmin = float(df[price_col].min(skipna=True))
-					pmax = float(df[price_col].max(skipna=True))
-					price_range = exp.slider(f"{name}: Price range", min_value=pmin, max_value=pmax, value=(pmin, pmax), key=f"price_{name}")
-		return dict(use_global=use_global, prod_sel=prod_sel, loc_sel=loc_sel, trans_sel=trans_sel, insp_sel=insp_sel, price_range=price_range)
-
-	# Create per-chart filter selections for KPIs, Bar, Scatter, Heatmap
-	kpi_filters = chart_filters_ui("KPIs", use_default=True)
-	bar_filters = chart_filters_ui("Bar", use_default=True)
-	scatter_filters = chart_filters_ui("Scatter", use_default=True)
-	heatmap_filters = chart_filters_ui("Heatmap", use_default=True)
+	# Local multiselect helper to render inside expanders/containers (not sidebar)
+	def local_multiselect_for(col, label, container, default_all=True, key_suffix=""):
+		if col in df.columns:
+			opts = sorted(df[col].dropna().unique().tolist())
+			default = opts if default_all else None
+			return container.multiselect(label, options=opts, default=default, key=f"{label}_{key_suffix}")
+		else:
+			return None
 
 	# Apply filters to create filtered_df
 	filtered = df.copy()
@@ -194,11 +177,22 @@ def main():
 	defect_candidates = [c for c in df.columns if "defect" in c.lower()]
 	defect_col = defect_candidates[0] if defect_candidates else None
 
-	# Determine which dataframe to use for KPIs (global filtered or its own filters)
-	if kpi_filters.get("use_global", True):
-		kpi_df = filtered
-	else:
-		kpi_df = apply_filters(df, kpi_filters.get("prod_sel"), kpi_filters.get("loc_sel"), kpi_filters.get("trans_sel"), kpi_filters.get("insp_sel"), kpi_filters.get("price_range"))
+	# Inline KPI filters next to KPI cards
+	exp_kpi = st.expander("KPIs filters (local)", expanded=False)
+	use_global_kpi = exp_kpi.checkbox("Use global filters", value=True, key="use_global_kpi")
+	prod_sel_kpi = loc_sel_kpi = trans_sel_kpi = insp_sel_kpi = None
+	price_range_kpi = (price_min, price_max)
+	if not use_global_kpi:
+		prod_sel_kpi = local_multiselect_for(product_col, "KPIs: Product Type", exp_kpi, key_suffix="kpi_prod")
+		loc_sel_kpi = local_multiselect_for(location_col, "KPIs: Location", exp_kpi, key_suffix="kpi_loc")
+		trans_sel_kpi = local_multiselect_for(transport_col, "KPIs: Transportation Modes", exp_kpi, key_suffix="kpi_trans")
+		insp_sel_kpi = local_multiselect_for(inspect_col, "KPIs: Inspection Results", exp_kpi, key_suffix="kpi_insp")
+		if price_col and pd.api.types.is_numeric_dtype(df[price_col]):
+			pmin = float(df[price_col].min(skipna=True))
+			pmax = float(df[price_col].max(skipna=True))
+			price_range_kpi = exp_kpi.slider("KPIs: Price range", min_value=pmin, max_value=pmax, value=(pmin, pmax), key="price_kpi")
+
+	kpi_df = filtered if use_global_kpi else apply_filters(df, prod_sel_kpi, loc_sel_kpi, trans_sel_kpi, insp_sel_kpi, price_range_kpi)
 
 	total_rev = kpi_df[rev_col].sum() if rev_col in kpi_df.columns else np.nan
 	total_costs = kpi_df[cost_col].sum() if cost_col in kpi_df.columns else np.nan
@@ -246,8 +240,22 @@ def main():
 	# Bar chart by PRODUCT_TYPE — improved with labels and sorting
 	with left:
 		st.subheader("Bar chart by Product Type")
-		# bar chart may use its own filters
-		bar_source = filtered if bar_filters.get("use_global", True) else apply_filters(df, bar_filters.get("prod_sel"), bar_filters.get("loc_sel"), bar_filters.get("trans_sel"), bar_filters.get("insp_sel"), bar_filters.get("price_range"))
+		# Bar chart: inline local filters
+		exp_bar = st.expander("Bar filters", expanded=False)
+		use_global_bar = exp_bar.checkbox("Use global filters", value=True, key="use_global_bar")
+		prod_sel_bar = loc_sel_bar = trans_sel_bar = insp_sel_bar = None
+		price_range_bar = (price_min, price_max)
+		if not use_global_bar:
+			prod_sel_bar = local_multiselect_for(product_col, "Bar: Product Type", exp_bar, key_suffix="bar_prod")
+			loc_sel_bar = local_multiselect_for(location_col, "Bar: Location", exp_bar, key_suffix="bar_loc")
+			trans_sel_bar = local_multiselect_for(transport_col, "Bar: Transportation Modes", exp_bar, key_suffix="bar_trans")
+			insp_sel_bar = local_multiselect_for(inspect_col, "Bar: Inspection Results", exp_bar, key_suffix="bar_insp")
+			if price_col and pd.api.types.is_numeric_dtype(df[price_col]):
+				pmin = float(df[price_col].min(skipna=True))
+				pmax = float(df[price_col].max(skipna=True))
+				price_range_bar = exp_bar.slider("Bar: Price range", min_value=pmin, max_value=pmax, value=(pmin, pmax), key="price_bar")
+
+		bar_source = filtered if use_global_bar else apply_filters(df, prod_sel_bar, loc_sel_bar, trans_sel_bar, insp_sel_bar, price_range_bar)
 		if product_col in bar_source.columns:
 			grp = bar_source.groupby(product_col)
 			if metric_choice == "Total Revenue":
@@ -287,12 +295,28 @@ def main():
 			st.info("No product type column found for bar chart.")
 
 		st.subheader("Costs vs Revenue (scatter)")
-		# scatter may use its own filters
-		scatter_source = filtered if scatter_filters.get("use_global", True) else apply_filters(df, scatter_filters.get("prod_sel"), scatter_filters.get("loc_sel"), scatter_filters.get("trans_sel"), scatter_filters.get("insp_sel"), scatter_filters.get("price_range"))
+		# Scatter: inline local filters and min_sold control
+		exp_scatter = st.expander("Scatter filters", expanded=False)
+		use_global_scatter = exp_scatter.checkbox("Use global filters", value=True, key="use_global_scatter")
+		prod_sel_scat = loc_sel_scat = trans_sel_scat = insp_sel_scat = None
+		price_range_scat = (price_min, price_max)
+		min_sold_local = 0
+		if not use_global_scatter:
+			prod_sel_scat = local_multiselect_for(product_col, "Scatter: Product Type", exp_scatter, key_suffix="scat_prod")
+			loc_sel_scat = local_multiselect_for(location_col, "Scatter: Location", exp_scatter, key_suffix="scat_loc")
+			trans_sel_scat = local_multiselect_for(transport_col, "Scatter: Transportation Modes", exp_scatter, key_suffix="scat_trans")
+			insp_sel_scat = local_multiselect_for(inspect_col, "Scatter: Inspection Results", exp_scatter, key_suffix="scat_insp")
+			if price_col and pd.api.types.is_numeric_dtype(df[price_col]):
+				pmin = float(df[price_col].min(skipna=True))
+				pmax = float(df[price_col].max(skipna=True))
+				price_range_scat = exp_scatter.slider("Scatter: Price range", min_value=pmin, max_value=pmax, value=(pmin, pmax), key="price_scatter")
+			min_sold_local = int(exp_scatter.number_input("Minimum number of products sold (for scatter)", min_value=0, value=0, key="min_sold_scatter"))
+
+		scatter_source = filtered if use_global_scatter else apply_filters(df, prod_sel_scat, loc_sel_scat, trans_sel_scat, insp_sel_scat, price_range_scat)
 		if (cost_col in scatter_source.columns) and (rev_col in scatter_source.columns):
 			scatter_df = scatter_source.copy()
 			if qty_col and qty_col in scatter_df.columns:
-				scatter_df = scatter_df[scatter_df[qty_col] >= min_sold]
+				scatter_df = scatter_df[scatter_df[qty_col] >= min_sold_local]
 
 			if scatter_df.empty:
 				st.info("No data for scatter after applying minimum products sold filter.")
@@ -331,8 +355,22 @@ def main():
 	# Right column: heatmap and donut
 	with right:
 		st.subheader("Heatmap: Avg Defect Rate")
-		# heatmap may use its own filters
-		heat_source = filtered if heatmap_filters.get("use_global", True) else apply_filters(df, heatmap_filters.get("prod_sel"), heatmap_filters.get("loc_sel"), heatmap_filters.get("trans_sel"), heatmap_filters.get("insp_sel"), heatmap_filters.get("price_range"))
+		# Heatmap: inline local filters
+		exp_heat = st.expander("Heatmap filters", expanded=False)
+		use_global_heat = exp_heat.checkbox("Use global filters", value=True, key="use_global_heat")
+		prod_sel_heat = loc_sel_heat = trans_sel_heat = insp_sel_heat = None
+		price_range_heat = (price_min, price_max)
+		if not use_global_heat:
+			prod_sel_heat = local_multiselect_for(product_col, "Heatmap: Product Type", exp_heat, key_suffix="heat_prod")
+			loc_sel_heat = local_multiselect_for(location_col, "Heatmap: Location", exp_heat, key_suffix="heat_loc")
+			trans_sel_heat = local_multiselect_for(transport_col, "Heatmap: Transportation Modes", exp_heat, key_suffix="heat_trans")
+			insp_sel_heat = local_multiselect_for(inspect_col, "Heatmap: Inspection Results", exp_heat, key_suffix="heat_insp")
+			if price_col and pd.api.types.is_numeric_dtype(df[price_col]):
+				pmin = float(df[price_col].min(skipna=True))
+				pmax = float(df[price_col].max(skipna=True))
+				price_range_heat = exp_heat.slider("Heatmap: Price range", min_value=pmin, max_value=pmax, value=(pmin, pmax), key="price_heat")
+
+		heat_source = filtered if use_global_heat else apply_filters(df, prod_sel_heat, loc_sel_heat, trans_sel_heat, insp_sel_heat, price_range_heat)
 		if (location_col in heat_source.columns) and (transport_col in heat_source.columns) and (defect_col in heat_source.columns):
 			heat = heat_source.groupby([location_col, transport_col])[defect_col].mean().reset_index()
 			pivot = heat.pivot(index=location_col, columns=transport_col, values=defect_col).fillna(0)
