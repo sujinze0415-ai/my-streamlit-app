@@ -1,598 +1,256 @@
-"""
-Supply Chain Dashboard App
-
-This Streamlit app builds an interactive, multi-visual business dashboard
-based on the cleaned supply_chain_data_cleaned.csv dataset (Project 1 output).
-
-Features:
-- Global filters (product type, location, transportation mode, inspection result)
-- 4+ different visualization types (bar, scatter, heatmap, donut)
-- All visualizations are connected via the same filtered DataFrame
-- Clear separation between:
-  - AI-generated enhancements (to be filled using GitHub Copilot)
-  - Student-generated enhancements (written manually by the team)
-"""
-
-import pandas as pd
 import streamlit as st
+import pandas as pd
+import numpy as np
 import plotly.express as px
+import plotly.graph_objects as go
 from pathlib import Path
 
-# =========================
-# 1. DATA LOADING
-# =========================
+
+st.set_page_config(page_title="Supply Chain Dashboard", layout="wide")
+
 
 @st.cache_data
-def load_data(csv_path: str) -> pd.DataFrame:
-    """
-    Load cleaned supply chain data from CSV.
+def load_data(csv_path: Path) -> pd.DataFrame:
+	"""Load CSV into DataFrame and do initial cleaning.
+
+	Assumptions: The CSV is named `supply_chain_data_cleaned.csv` and sits next to this file
+	or in the working directory. Numeric columns may be named in a variety of ways; the
+	loader will try to coerce commonly named numeric columns to numeric types.
+	"""
+	df = pd.read_csv(csv_path)
+
+	# Drop exact duplicate rows
+	df = df.drop_duplicates()
+
+	# Normalize column names to uppercase stripped for mapping convenience
+	cols_upper = {c: c for c in df.columns}
+
+	def find_col(substrings):
+		"""Return first matching column name by checking substrings (case-insensitive)."""
+		s = [c for c in df.columns]
+		for substr in substrings:
+			for c in s:
+				if substr.lower() in c.lower():
+					return c
+		return None
+
+	# Attempt to find key numeric columns
+	price_col = find_col(["price", "unit_price", "unit price"]) 
+	revenue_col = find_col(["revenue", "sales", "total_revenue", "total revenue"]) 
+	costs_col = find_col(["cost", "costs", "expense", "total_cost"]) 
+	defect_col = find_col(["defect_rate", "defect", "defect rate", "defects_pct"]) 
+	qty_col = find_col(["number_of_products_sold", "units_sold", "quantity", "qty", "sold"]) 
+
+	# Try to coerce found columns to numeric, if present
+	for c in [price_col, revenue_col, costs_col, defect_col, qty_col]:
+		if c is not None:
+			df[c] = pd.to_numeric(df[c], errors="coerce")
+
+	# If defect rate found but it's in fraction (0-1), allow average presentation as percent later
+	return df
 
-    Parameters
-    ----------
-    csv_path : str
-        Path to the cleaned CSV file (Project 1 output).
-
-    Returns
-    -------
-    pd.DataFrame
-        Cleaned supply chain dataset.
-    """
-    df = pd.read_csv(csv_path)
-    return df
-
-
-# =========================
-# 2. GLOBAL FILTER FUNCTION
-# =========================
-
-def filter_data(
-    df: pd.DataFrame,
-    product_types: list,
-    locations: list,
-    transport_modes: list,
-    inspection_results: list,
-) -> pd.DataFrame:
-    """
-    Apply global filters and return filtered DataFrame.
-    All visualizations will be based on this filtered_df,
-    so that they are automatically linked and synchronized.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Original full dataset.
-    product_types : list
-        Selected product types from sidebar.
-    locations : list
-        Selected locations from sidebar.
-    transport_modes : list
-        Selected transportation modes from sidebar.
-    inspection_results : list
-        Selected inspection results from sidebar.
-
-    Returns
-    -------
-    pd.DataFrame
-        Filtered dataset.
-    """
-    filtered = df.copy()
-
-    if product_types:
-        filtered = filtered[filtered["PRODUCT_TYPE"].isin(product_types)]
-
-    if locations:
-        filtered = filtered[filtered["LOCATION"].isin(locations)]
-
-    if transport_modes:
-        filtered = filtered[filtered["TRANSPORTATION_MODES"].isin(transport_modes)]
-
-    if inspection_results:
-        filtered = filtered[filtered["INSPECTION_RESULTS"].isin(inspection_results)]
-
-    return filtered
-
-
-# =========================
-# 3. VISUALIZATION 1
-#    Bar Chart: Revenue by Product Type
-# =========================
-
-def viz1_base_revenue_by_product_type(df: pd.DataFrame):
-    """
-    Base bar chart for total revenue by product type.
-
-    Visualization Type: Bar Chart
-    Business Question:
-        Which product types generate the highest revenue?
-    """
-    revenue_by_type = (
-        df.groupby("PRODUCT_TYPE", as_index=False)["REVENUE_GENERATED"].sum()
-    )
-
-    fig = px.bar(
-        revenue_by_type,
-        x="PRODUCT_TYPE",
-        y="REVENUE_GENERATED",
-        title="Total Revenue by Product Type",
-        labels={"REVENUE_GENERATED": "Total Revenue", "PRODUCT_TYPE": "Product Type"},
-    )
-
-    return fig
-
-
-def viz1_student_enhancement(fig, df: pd.DataFrame):
-    """
-    STUDENT-GENERATED ENHANCEMENT for Visualization 1.
-
-    Interactive feature:
-    - Let the user choose between:
-        * Absolute revenue
-        * Percentage of total revenue
-    - Optionally sort bars by value.
-
-    This satisfies the requirement:
-    "At least two visualizations must include interactive elements
-    in the student-generated features."
-    """
-    st.subheader("Visualization 1: Revenue by Product Type")
-
-    # Student interactive controls
-    display_mode = st.radio(
-        "Display mode (Student enhancement):",
-        ["Absolute revenue", "Percentage of total revenue"],
-        key="viz1_display_mode",
-    )
-
-    sort_option = st.checkbox(
-        "Sort by value (descending)", key="viz1_sort_desc"
-    )
-
-    # Recompute aggregation according to mode
-    revenue_by_type = (
-        df.groupby("PRODUCT_TYPE", as_index=False)["REVENUE_GENERATED"].sum()
-    )
-
-    if display_mode == "Percentage of total revenue":
-        total = revenue_by_type["REVENUE_GENERATED"].sum()
-        revenue_by_type["REVENUE_PERCENT"] = (
-            revenue_by_type["REVENUE_GENERATED"] / total * 100
-        )
-        y_col = "REVENUE_PERCENT"
-        y_label = "Revenue (%)"
-        title_suffix = " (Percentage)"
-    else:
-        y_col = "REVENUE_GENERATED"
-        y_label = "Total Revenue"
-        title_suffix = " (Absolute)"
-
-    if sort_option:
-        revenue_by_type = revenue_by_type.sort_values(by=y_col, ascending=False)
-
-    fig = px.bar(
-        revenue_by_type,
-        x="PRODUCT_TYPE",
-        y=y_col,
-        title=f"Total Revenue by Product Type{title_suffix}",
-        labels={y_col: y_label, "PRODUCT_TYPE": "Product Type"},
-    )
-
-    st.plotly_chart(fig, use_container_width=True)
-
-    return fig
-
-
-def viz1_ai_enhancement_placeholder(fig, df: pd.DataFrame):
-    """
-    AI-GENERATED ENHANCEMENT PLACEHOLDER for Visualization 1.
-
-    IMPORTANT:
-    - In your real project, ask GitHub Copilot inside VS Code, e.g.:
-
-        # Prompt example (do NOT include in final code):
-        # "Copilot, add an automatic highlight for the top 1 product type
-        #  and display the exact revenue in the hover tooltip."
-
-    - Replace this placeholder with the code suggested by Copilot.
-    - Clearly label the final block as "AI-generated" in your report/notebook.
-
-    Here we just keep a simple version to show where AI code should go.
-    """
-    st.markdown("**(AI enhancement for Viz 1 – to be implemented using Copilot.)**")
-    # Example minimal display to keep app running:
-    if fig is not None:
-        st.plotly_chart(fig, use_container_width=True)
-
-
-# =========================
-# 4. VISUALIZATION 2
-#    Heatmap: Delivery Efficiency by Location and Transport Mode
-# =========================
-
-def viz2_base_heatmap_efficiency(df: pd.DataFrame):
-    """
-    Base heatmap of average delivery efficiency by (LOCATION, TRANSPORTATION_MODES).
-
-    Visualization Type: Heatmap
-    Business Question:
-        Which combinations of location and transportation mode are most efficient?
-    """
-    if df.empty:
-        return None
-
-    pivot_df = (
-        df.groupby(["LOCATION", "TRANSPORTATION_MODES"], as_index=False)[
-            "DELIVERY_EFFICIENCY"
-        ]
-        .mean()
-    )
-
-    fig = px.density_heatmap(
-        pivot_df,
-        x="TRANSPORTATION_MODES",
-        y="LOCATION",
-        z="DELIVERY_EFFICIENCY",
-        color_continuous_scale="Viridis",
-        title="Average Delivery Efficiency by Location and Transportation Mode",
-        labels={
-            "TRANSPORTATION_MODES": "Transportation Mode",
-            "LOCATION": "Location",
-            "DELIVERY_EFFICIENCY": "Delivery Efficiency",
-        },
-    )
-
-    return fig
-
-
-def viz2_student_enhancement(fig, df: pd.DataFrame):
-    """
-    STUDENT-GENERATED ENHANCEMENT for Visualization 2.
-
-    Interactive feature:
-    - Add a slider to filter by minimum delivery efficiency.
-    - Only show cells where DELIVERY_EFFICIENCY >= threshold.
-    """
-    st.subheader("Visualization 2: Delivery Efficiency Heatmap")
-
-    if df.empty:
-        st.warning("No data available under current filters.")
-        return None
-
-    min_eff = float(df["DELIVERY_EFFICIENCY"].min())
-    max_eff = float(df["DELIVERY_EFFICIENCY"].max())
-
-    step = (max_eff - min_eff) / 20 if max_eff > min_eff else 1.0
-
-    threshold = st.slider(
-        "Minimum delivery efficiency to display (Student enhancement):",
-        min_value=min_eff,
-        max_value=max_eff,
-        value=min_eff,
-        step=step,
-        key="viz2_threshold",
-    )
-
-    pivot_df = (
-        df.groupby(["LOCATION", "TRANSPORTATION_MODES"], as_index=False)[
-            "DELIVERY_EFFICIENCY"
-        ]
-        .mean()
-    )
-
-    pivot_df = pivot_df[pivot_df["DELIVERY_EFFICIENCY"] >= threshold]
-
-    if pivot_df.empty:
-        st.warning("No combinations meet the selected efficiency threshold.")
-        return None
-
-    fig = px.density_heatmap(
-        pivot_df,
-        x="TRANSPORTATION_MODES",
-        y="LOCATION",
-        z="DELIVERY_EFFICIENCY",
-        color_continuous_scale="Viridis",
-        title="Average Delivery Efficiency by Location and Transportation Mode",
-        labels={
-            "TRANSPORTATION_MODES": "Transportation Mode",
-            "LOCATION": "Location",
-            "DELIVERY_EFFICIENCY": "Delivery Efficiency",
-        },
-    )
-
-    st.plotly_chart(fig, use_container_width=True)
-    return fig
-
-
-def viz2_ai_enhancement_placeholder(fig, df: pd.DataFrame):
-    """
-    AI-GENERATED ENHANCEMENT PLACEHOLDER for Visualization 2.
-
-    Use Copilot later to add features such as:
-    - Dynamic annotations for best/worst cells.
-    - A toggle to switch between DELIVERY_EFFICIENCY and DEFECT_RATES.
-    """
-    st.markdown("**(AI enhancement for Viz 2 – to be implemented using Copilot.)**")
-    if fig is not None:
-        st.plotly_chart(fig, use_container_width=True)
-
-
-# =========================
-# 5. VISUALIZATION 3
-#    Scatter: Price vs Units Sold, colored by Product Type
-# =========================
-
-def viz3_base_scatter_price_vs_sold(df: pd.DataFrame):
-    """
-    Base scatter plot: Price vs Number of Products Sold, colored by product type.
-
-    Visualization Type: Scatter Plot
-    Business Question:
-        How does price relate to sales volume across product types?
-    """
-    if df.empty:
-        return None
-
-    fig = px.scatter(
-        df,
-        x="PRICE",
-        y="NUMBER_OF_PRODUCTS_SOLD",
-        color="PRODUCT_TYPE",
-        hover_data=["SKU"],
-        title="Price vs Units Sold by Product Type",
-        labels={
-            "PRICE": "Price",
-            "NUMBER_OF_PRODUCTS_SOLD": "Number of Products Sold",
-            "PRODUCT_TYPE": "Product Type",
-        },
-    )
-    return fig
-
-
-def viz3_student_enhancement(fig, df: pd.DataFrame):
-    """
-    STUDENT-GENERATED ENHANCEMENT for Visualization 3.
-
-    Interactive feature:
-    - Allow user to filter by a price range using a range slider.
-    """
-    st.subheader("Visualization 3: Price vs Units Sold")
-
-    if df.empty:
-        st.warning("No data available under current filters.")
-        return None
-
-    min_price = float(df["PRICE"].min())
-    max_price = float(df["PRICE"].max())
-
-    price_range = st.slider(
-        "Select price range (Student enhancement):",
-        min_value=min_price,
-        max_value=max_price,
-        value=(min_price, max_price),
-        key="viz3_price_range",
-    )
-
-    mask = df["PRICE"].between(price_range[0], price_range[1])
-    filtered_df = df[mask]
-
-    if filtered_df.empty:
-        st.warning("No products within the selected price range.")
-        return None
-
-    fig = px.scatter(
-        filtered_df,
-        x="PRICE",
-        y="NUMBER_OF_PRODUCTS_SOLD",
-        color="PRODUCT_TYPE",
-        hover_data=["SKU"],
-        title="Price vs Units Sold by Product Type (Filtered by Price Range)",
-        labels={
-            "PRICE": "Price",
-            "NUMBER_OF_PRODUCTS_SOLD": "Number of Products Sold",
-            "PRODUCT_TYPE": "Product Type",
-        },
-    )
-
-    st.plotly_chart(fig, use_container_width=True)
-    return fig
-
-
-def viz3_ai_enhancement_placeholder(fig, df: pd.DataFrame):
-    """
-    AI-GENERATED ENHANCEMENT PLACEHOLDER for Visualization 3.
-
-    Example ideas for Copilot:
-    - Add a regression trend line.
-    - Calculate and display correlation between PRICE and NUMBER_OF_PRODUCTS_SOLD.
-    """
-    st.markdown("**(AI enhancement for Viz 3 – to be implemented using Copilot.)**")
-    if fig is not None:
-        st.plotly_chart(fig, use_container_width=True)
-
-
-# =========================
-# 6. VISUALIZATION 4
-#    Donut Chart: Transportation Cost by Mode
-# =========================
-
-def viz4_base_donut_cost_by_transport_mode(df: pd.DataFrame):
-    """
-    Base donut chart of total transportation costs by transportation mode.
-
-    Visualization Type: Donut (Pie) Chart
-    Business Question:
-        How are transportation costs distributed across different modes?
-    """
-    if df.empty:
-        return None
-
-    cost_by_mode = (
-        df.groupby("TRANSPORTATION_MODES", as_index=False)["COSTS"].sum()
-    )
-
-    fig = px.pie(
-        cost_by_mode,
-        names="TRANSPORTATION_MODES",
-        values="COSTS",
-        hole=0.4,
-        title="Total Transportation Costs by Mode",
-    )
-
-    return fig
-
-
-def viz4_student_enhancement(fig, df: pd.DataFrame):
-    """
-    STUDENT-GENERATED ENHANCEMENT for Visualization 4.
-
-    Feature:
-    - Simple toggle to switch between viewing COSTS and SHIPPING_COSTS.
-    (This one is less interactive than sliders, but still demonstrates a student choice
-    of business metric.)
-    """
-    st.subheader("Visualization 4: Transportation Cost Breakdown")
-
-    if df.empty:
-        st.warning("No data available under current filters.")
-        return None
-
-    metric = st.radio(
-        "Select cost metric (Student enhancement):",
-        ["COSTS", "SHIPPING_COSTS"],
-        key="viz4_metric",
-    )
-
-    cost_by_mode = (
-        df.groupby("TRANSPORTATION_MODES", as_index=False)[metric].sum()
-    )
-
-    fig = px.pie(
-        cost_by_mode,
-        names="TRANSPORTATION_MODES",
-        values=metric,
-        hole=0.4,
-        title=f"Total {metric} by Transportation Mode",
-    )
-
-    st.plotly_chart(fig, use_container_width=True)
-    return fig
-
-
-def viz4_ai_enhancement_placeholder(fig, df: pd.DataFrame):
-    """
-    AI-GENERATED ENHANCEMENT PLACEHOLDER for Visualization 4.
-
-    Possible Copilot ideas:
-    - Automatically highlight the most expensive mode.
-    - Add an annotation with the percentage of total cost.
-    """
-    st.markdown("**(AI enhancement for Viz 4 – to be implemented using Copilot.)**")
-    if fig is not None:
-        st.plotly_chart(fig, use_container_width=True)
-
-
-# =========================
-# 7. MAIN APP LAYOUT
-# =========================
 
 def main():
-    st.set_page_config(
-        page_title="Supply Chain Dashboard",
-        layout="wide",
-        initial_sidebar_state="expanded",
-    )
+	# Locate CSV next to this script or in current working directory
+	base = Path(__file__).resolve().parent
+	csv_path = base / "supply_chain_data_cleaned.csv"
+	if not csv_path.exists():
+		# fallback to working directory
+		csv_path = Path("supply_chain_data_cleaned.csv")
 
-    st.title("Supply Chain Performance Dashboard")
-    st.caption(
-        "Project 2 – Interactive, multi-visual dashboard based on cleaned supply chain data."
-    )
+	if not csv_path.exists():
+		st.error(f"Could not find supply_chain_data_cleaned.csv at {csv_path}. Put the file in the app folder.")
+		return
 
-    # --- Load data ---
-    csv_path = Path("supply_chain_data_cleaned.csv")
-    df = load_data(str(csv_path))
+	df = load_data(csv_path)
 
-    # --- Sidebar filters (global) ---
-    st.sidebar.header("Global Filters")
+	st.title("Supply Chain Dashboard")
 
-    product_types = st.sidebar.multiselect(
-        "Product Type",
-        options=sorted(df["PRODUCT_TYPE"].dropna().unique()),
-        default=sorted(df["PRODUCT_TYPE"].dropna().unique()),
-    )
+	# Identify commonly used categorical columns
+	def find_col(df, substrings):
+		for substr in substrings:
+			for c in df.columns:
+				if substr.lower() in c.lower():
+					return c
+		return None
 
-    locations = st.sidebar.multiselect(
-        "Location",
-        options=sorted(df["LOCATION"].dropna().unique()),
-        default=sorted(df["LOCATION"].dropna().unique()),
-    )
+	product_col = find_col(df, ["product_type", "product type", "product"]) or "PRODUCT_TYPE"
+	location_col = find_col(df, ["location", "site", "warehouse"]) or "LOCATION"
+	transport_col = find_col(df, ["transportation_modes", "transportation mode", "transport"]) or "TRANSPORTATION_MODES"
+	inspect_col = find_col(df, ["inspection_results", "inspection result", "inspection"]) or "INSPECTION_RESULTS"
+	customer_demo_col = find_col(df, ["customer_demographics", "customer demo", "demographics"]) or "CUSTOMER_DEMOGRAPHICS"
 
-    transport_modes = st.sidebar.multiselect(
-        "Transportation Modes",
-        options=sorted(df["TRANSPORTATION_MODES"].dropna().unique()),
-        default=sorted(df["TRANSPORTATION_MODES"].dropna().unique()),
-    )
+	# Provide sidebar filters
+	st.sidebar.header("Filters")
 
-    inspection_results = st.sidebar.multiselect(
-        "Inspection Results",
-        options=sorted(df["INSPECTION_RESULTS"].dropna().unique()),
-        default=sorted(df["INSPECTION_RESULTS"].dropna().unique()),
-    )
+	# Multiselect helpers that tolerate missing columns
+	def multiselect_for(col, label):
+		if col in df.columns:
+			opts = sorted(df[col].dropna().unique().tolist())
+			return st.sidebar.multiselect(label, options=opts, default=opts)
+		else:
+			return None
 
-    # Apply global filters
-    filtered_df = filter_data(
-        df,
-        product_types=product_types,
-        locations=locations,
-        transport_modes=transport_modes,
-        inspection_results=inspection_results,
-    )
+	selected_products = multiselect_for(product_col, "Product Type")
+	selected_locations = multiselect_for(location_col, "Location")
+	selected_transports = multiselect_for(transport_col, "Transportation Modes")
+	selected_inspections = multiselect_for(inspect_col, "Inspection Results")
 
-    if filtered_df.empty:
-        st.warning("No data available with the current filter selections.")
-        st.stop()
+	# Price range slider
+	# Try to find a price column
+	price_candidates = [c for c in df.columns if "price" in c.lower()]
+	price_col = price_candidates[0] if price_candidates else None
+	if price_col and pd.api.types.is_numeric_dtype(df[price_col]):
+		min_p = float(df[price_col].min(skipna=True))
+		max_p = float(df[price_col].max(skipna=True))
+		price_min, price_max = st.sidebar.slider("Price range", min_value=min_p, max_value=max_p, value=(min_p, max_p))
+	else:
+		price_min, price_max = None, None
 
-    # ======================
-    # Layout: 2x2 grid of visualizations (student versions)
-    # ======================
+	# Bar chart metric selection
+	metric_choice = st.sidebar.selectbox("Bar chart metric", ["Total Revenue", "Total Costs", "Total Profit"]) 
 
-    col1, col2 = st.columns(2)
+	# Scatter: min products sold
+	qty_candidates = [c for c in df.columns if any(x in c.lower() for x in ["sold", "quantity", "units", "number_of_products"])]
+	qty_col = qty_candidates[0] if qty_candidates else None
+	min_sold = int(st.sidebar.number_input("Minimum number of products sold (for scatter)", min_value=0, value=0))
 
-    with col1:
-        # Visualization 1 – student version
-        viz1_student_enhancement(
-            fig=None,
-            df=filtered_df,
-        )
+	# Donut category choice
+	donut_options = [opt for opt in [inspect_col, customer_demo_col] if opt in df.columns]
+	if not donut_options:
+		donut_options = []
+	donut_choice = st.sidebar.selectbox("Donut category", options=donut_options if donut_options else ["None"])
 
-    with col2:
-        # Visualization 2 – student version
-        viz2_student_enhancement(
-            fig=None,
-            df=filtered_df,
-        )
+	# Apply filters to create filtered_df
+	filtered = df.copy()
+	# Apply product filter
+	if selected_products is not None and product_col in filtered.columns:
+		filtered = filtered[filtered[product_col].isin(selected_products)]
+	if selected_locations is not None and location_col in filtered.columns:
+		filtered = filtered[filtered[location_col].isin(selected_locations)]
+	if selected_transports is not None and transport_col in filtered.columns:
+		filtered = filtered[filtered[transport_col].isin(selected_transports)]
+	if selected_inspections is not None and inspect_col in filtered.columns:
+		filtered = filtered[filtered[inspect_col].isin(selected_inspections)]
+	if price_col and price_min is not None:
+		filtered = filtered[(filtered[price_col] >= price_min) & (filtered[price_col] <= price_max)]
 
-    col3, col4 = st.columns(2)
+	# If no rows after filtering, show warning and stop
+	if filtered.empty:
+		st.warning("No data after applying filters. Try expanding the filters.")
+		st.stop()
 
-    with col3:
-        # Visualization 3 – student version
-        viz3_student_enhancement(
-            fig=None,
-            df=filtered_df,
-        )
+	# KPIs
+	# Try to find revenue and costs columns
+	rev_candidates = [c for c in df.columns if "revenue" in c.lower() or "sales" in c.lower()]
+	rev_col = rev_candidates[0] if rev_candidates else None
+	cost_candidates = [c for c in df.columns if "cost" in c.lower()]
+	cost_col = cost_candidates[0] if cost_candidates else None
+	defect_candidates = [c for c in df.columns if "defect" in c.lower()]
+	defect_col = defect_candidates[0] if defect_candidates else None
 
-    with col4:
-        # Visualization 4 – student version
-        viz4_student_enhancement(
-            fig=None,
-            df=filtered_df,
-        )
+	total_rev = filtered[rev_col].sum() if rev_col in filtered.columns else np.nan
+	total_costs = filtered[cost_col].sum() if cost_col in filtered.columns else np.nan
+	total_profit = (total_rev - total_costs) if (not np.isnan(total_rev) and not np.isnan(total_costs)) else np.nan
+	avg_defect = filtered[defect_col].mean() if defect_col in filtered.columns else np.nan
 
-    # NOTE:
-    # For now we do NOT render the AI placeholder charts here,
-    # to avoid StreamlitDuplicateElementId errors.
-    # When real Copilot-generated enhancements are ready,
-    # you can create a new section below with separate charts.
+	k1, k2, k3, k4 = st.columns(4)
+	k1.metric("Total Revenue", f"{total_rev:,.2f}" if not np.isnan(total_rev) else "N/A")
+	k2.metric("Total Costs", f"{total_costs:,.2f}" if not np.isnan(total_costs) else "N/A")
+	k3.metric("Total Profit", f"{total_profit:,.2f}" if not np.isnan(total_profit) else "N/A")
+	# Format defect as percent if looks like 0-1
+	if not np.isnan(avg_defect):
+		if avg_defect <= 1:
+			k4.metric("Avg Defect Rate", f"{avg_defect*100:.2f}%")
+		else:
+			k4.metric("Avg Defect Rate", f"{avg_defect:.2f}")
+	else:
+		k4.metric("Avg Defect Rate", "N/A")
+
+	st.markdown("---")
+
+	# Layout: left column charts and right column heatmap/donut
+	left, right = st.columns((2, 1))
+
+	# Bar chart by PRODUCT_TYPE
+	with left:
+		st.subheader("Bar chart by Product Type")
+		if product_col in filtered.columns:
+			grp = filtered.groupby(product_col)
+			if metric_choice == "Total Revenue":
+				series = grp[rev_col].sum() if rev_col in filtered.columns else pd.Series([])
+				y_label = "Revenue"
+			elif metric_choice == "Total Costs":
+				series = grp[cost_col].sum() if cost_col in filtered.columns else pd.Series([])
+				y_label = "Costs"
+			else:
+				# profit
+				if rev_col in filtered.columns and cost_col in filtered.columns:
+					series = grp[rev_col].sum() - grp[cost_col].sum()
+				else:
+					series = pd.Series([])
+				y_label = "Profit"
+
+			bar_df = series.reset_index()
+			bar_df.columns = [product_col, "value"]
+			bar_df = bar_df.sort_values("value", ascending=False)
+			fig_bar = px.bar(bar_df, x=product_col, y="value", labels={"value": y_label, product_col: "Product Type"})
+			st.plotly_chart(fig_bar, use_container_width=True)
+		else:
+			st.info("No product type column found for bar chart.")
+
+		st.subheader("Costs vs Revenue (scatter)")
+		if (cost_col in filtered.columns) and (rev_col in filtered.columns):
+			scatter_df = filtered.copy()
+			if qty_col and qty_col in scatter_df.columns:
+				scatter_df = scatter_df[scatter_df[qty_col] >= min_sold]
+
+			if scatter_df.empty:
+				st.info("No data for scatter after applying minimum products sold filter.")
+			else:
+				size = scatter_df[qty_col] if (qty_col and qty_col in scatter_df.columns) else None
+				fig_scatter = px.scatter(
+					scatter_df,
+					x=cost_col,
+					y=rev_col,
+					color=product_col if product_col in scatter_df.columns else None,
+					size=size,
+					hover_data=[product_col, location_col] if product_col in scatter_df.columns and location_col in scatter_df.columns else None,
+					labels={cost_col: "Costs", rev_col: "Revenue"},
+				)
+				st.plotly_chart(fig_scatter, use_container_width=True)
+		else:
+			st.info("Revenue or Costs column not found for scatter plot.")
+
+	# Right column: heatmap and donut
+	with right:
+		st.subheader("Heatmap: Avg Defect Rate")
+		if (location_col in filtered.columns) and (transport_col in filtered.columns) and (defect_col in filtered.columns):
+			heat = filtered.groupby([location_col, transport_col])[defect_col].mean().reset_index()
+			pivot = heat.pivot(index=location_col, columns=transport_col, values=defect_col)
+			# Use plotly heatmap
+			fig_heat = go.Figure(data=go.Heatmap(
+				z=pivot.values,
+				x=pivot.columns.astype(str),
+				y=pivot.index.astype(str),
+				colorscale="Viridis",
+				colorbar=dict(title="Avg Defect")
+			))
+			fig_heat.update_layout(xaxis_title=transport_col, yaxis_title=location_col, height=400)
+			st.plotly_chart(fig_heat, use_container_width=True)
+		else:
+			st.info("Require LOCATION, TRANSPORTATION_MODES and a defect rate column for heatmap.")
+
+		st.subheader("Donut chart")
+		if donut_choice and donut_choice in filtered.columns:
+			donut_df = filtered[donut_choice].value_counts().reset_index()
+			donut_df.columns = [donut_choice, "count"]
+			fig_donut = go.Figure(data=[go.Pie(labels=donut_df[donut_choice], values=donut_df["count"], hole=0.5)])
+			fig_donut.update_traces(textinfo='percent+label')
+			st.plotly_chart(fig_donut, use_container_width=True)
+		else:
+			st.info("No category selected or column missing for donut chart.")
 
 
 if __name__ == "__main__":
-    main()
-
+	main()
