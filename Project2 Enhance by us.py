@@ -123,10 +123,8 @@ if filtered_df.empty:
     st.stop()
 
 # -------------------------------
-# 4. Show KPI summary  （Student-enhanced）
+# 4. Show KPI summary  (Student-enhanced)
 # -------------------------------
-# Student-enhanced: clearer formatting and short captions
-
 total_revenue = filtered_df["REVENUE_GENERATED"].sum()
 total_costs = filtered_df["COSTS"].sum()
 total_profit = total_revenue - total_costs
@@ -134,45 +132,27 @@ avg_defect_rate = filtered_df["DEFECT_RATES"].mean()
 
 kpi1, kpi2, kpi3, kpi4 = st.columns(4)
 
-with kpi1:
-    st.metric("Total Revenue (USD)", f"${total_revenue:,.0f}")
-    st.caption("Student-enhanced: Sum of REVENUE_GENERATED after filters")
+# Student-enhanced: Add currency symbol and integer formatting to better reflect a business view
+kpi1.metric("Total Revenue (USD)", f"${total_revenue:,.0f}")
 
-with kpi2:
-    st.metric("Total Costs (USD)", f"${total_costs:,.0f}")
-    st.caption("Student-enhanced: Sum of COSTS after filters")
+kpi2.metric("Total Costs (USD)", f"${total_costs:,.0f}")
 
-with kpi3:
-    # Student-enhanced: show +/- sign to indicate gain or loss
-    profit_label = f"${total_profit:,.0f}"
-    st.metric("Total Profit (USD)", profit_label)
-    st.caption("Student-enhanced: Revenue − Costs")
+# Student-enhanced: Display profit in USD format
+kpi3.metric("Total Profit (USD)", f"${total_profit:,.0f}")
 
-with kpi4:
-    # Assume DEFECT_RATES are between 0 and 1
-    st.metric("Average Defect Rate", f"{avg_defect_rate * 100:.2f}%")
-    st.caption("Student-enhanced: Mean DEFECT_RATES (%)")
+# Student-enhanced: Clearly display defect rates as percentages
+kpi4.metric("Average Defect Rate", f"{avg_defect_rate * 100:.2f}%")
 
 st.markdown("---")
 
 # -------------------------------
-# 5. Bar chart by PRODUCT_TYPE  （Student-enhanced）
+# 5. Bar chart by PRODUCT_TYPE  (Student-enhanced)
 # -------------------------------
 st.subheader("Bar Chart by Product Type")
 
-# Student-enhanced: allow user to choose metric AND number of top categories
 metric_option = st.selectbox(
     "Select metric for bar chart",
     options=["Total Revenue", "Total Costs", "Total Profit"],
-)
-
-top_n = st.slider(
-    "Number of top product types to display",
-    min_value=3,
-    max_value=10,
-    value=5,
-    step=1,
-    help="Student-enhanced: focus on top product types only",
 )
 
 grouped = filtered_df.groupby("PRODUCT_TYPE")
@@ -187,25 +167,25 @@ else:  # Total Profit
         - grouped["COSTS"].sum()
     ).reset_index(name="VALUE")
 
-# Student-enhanced: sort and keep only Top N
-bar_data = bar_data.sort_values("VALUE", ascending=False).head(top_n)
+# Student-enhanced: 按数值从大到小排序，方便看到表现最好/最差的产品类型
+bar_data = bar_data.sort_values("VALUE", ascending=False)
 
 bar_fig = px.bar(
     bar_data,
     x="PRODUCT_TYPE",
     y="VALUE",
     labels={"PRODUCT_TYPE": "Product Type", "VALUE": metric_option},
-    title=f"{metric_option} by Product Type (Top {top_n})  - Student-enhanced",
+    title=f"{metric_option} by Product Type (Student-enhanced)",
 )
 
-# Student-enhanced: show values on bars
-bar_fig.update_traces(text=bar_data["VALUE"].round(0), textposition="outside")
+# Student-enhanced: 轻微旋转横轴标签，避免重叠
 bar_fig.update_layout(xaxis_tickangle=-30, margin=dict(t=60, b=80))
 
 st.plotly_chart(bar_fig, use_container_width=True)
 
+
 # -------------------------------
-# 6. Scatter plot: costs vs revenue  （Student-enhanced）
+# 6. Scatter plot: costs vs revenue  (Student-enhanced)
 # -------------------------------
 st.subheader("Scatter Plot: Costs vs Revenue")
 
@@ -215,37 +195,33 @@ scatter_df = scatter_df[scatter_df["NUMBER_OF_PRODUCTS_SOLD"] >= min_sold]
 if scatter_df.empty:
     st.info("No data for scatter plot after applying minimum NUMBER_OF_PRODUCTS_SOLD.")
 else:
-    # Student-enhanced: allow user to choose color dimension
-    color_choice = st.selectbox(
-        "Color points by (Student-enhanced)",
-        options=["PRODUCT_TYPE", "LOCATION"],
-        index=0 if "PRODUCT_TYPE" in scatter_df.columns else 1,
-    )
-
-    hover_cols = [c for c in ["SKU", "LOCATION", "PRODUCT_TYPE"] if c in scatter_df.columns]
+    hover_cols = ["SKU", "LOCATION"]
+    hover_cols = [c for c in hover_cols if c in scatter_df.columns]
 
     scatter_fig = px.scatter(
         scatter_df,
         x="COSTS",
         y="REVENUE_GENERATED",
-        color=color_choice if color_choice in scatter_df.columns else None,
+        color="PRODUCT_TYPE",
         size="NUMBER_OF_PRODUCTS_SOLD",
         hover_data=hover_cols,
         labels={"COSTS": "Costs (USD)", "REVENUE_GENERATED": "Revenue (USD)"},
-        title="Student-enhanced: Costs vs Revenue with number sold as point size",
+        title="Costs vs Revenue by Product Type (Student-enhanced)",
     )
 
-    scatter_fig.update_layout(margin=dict(t=60, b=40))
-    st.caption(
-        "Student-enhanced: points above the diagonal indicate products where revenue is much higher than costs."
+    # Student-enhanced: 明确轴标题和整体边距，方便阅读
+    scatter_fig.update_layout(
+        xaxis_title="Costs (USD)",
+        yaxis_title="Revenue (USD)",
+        margin=dict(t=60, b=40)
     )
 
     st.plotly_chart(scatter_fig, use_container_width=True)
 
- # -------------------------------
+# -------------------------------
 # 7. Heatmap of defect rates  （Student-enhanced）
 # -------------------------------
-st.subheader("Heatmap of Average Defect Rates")
+st.subheader("Heatmap of Average Defect Rates  (Student-enhanced)")
 
 heat = (
     filtered_df.groupby(["LOCATION", "TRANSPORTATION_MODES"])["DEFECT_RATES"]
@@ -263,25 +239,20 @@ heat_fig = px.imshow(
     labels=dict(
         x="Transportation Modes",
         y="Location",
-        color="Avg Defect Rate (%)",
+        color="Avg Defect Rate"
     ),
-    title="Student-enhanced: Average Defect Rates by Location and Transport",
-    aspect="auto",
+    title="Average Defect Rates by Location and Transport (Student-enhanced)",
 )
 
-# Student-enhanced: show percentage (0–1 -> %)
-heat_fig.update_traces(
-    z=heat_pivot.values * 100,
-    colorbar=dict(title="Defect Rate (%)"),
-)
+# Student-enhanced: 留出一点上方空间给标题
+heat_fig.update_layout(margin=dict(t=60, b=40))
 
 st.plotly_chart(heat_fig, use_container_width=True)
-st.caption("Student-enhanced: darker cells indicate higher average defect rates.")
 
 # -------------------------------
 # 8. Donut chart  （Student-enhanced）
 # -------------------------------
-st.subheader("Donut Chart")
+st.subheader("Donut Chart  (Student-enhanced)")
 
 donut_counts = (
     filtered_df[donut_category]
@@ -295,15 +266,15 @@ donut_fig = px.pie(
     names=donut_category,
     values="COUNT",
     hole=0.5,
-    title=f"Student-enhanced: Distribution of {donut_category}",
+    title=f"Distribution of {donut_category} (Student-enhanced)",
 )
 
-# Student-enhanced: show percent + label on chart, count in hover
+# Student-enhanced: 在圆环内部显示百分比 + 标签，hover 里再看具体数量
 donut_fig.update_traces(
-    textposition="inside",
     textinfo="percent+label",
-    hovertemplate=f"{donut_category}: %{{label}}<br>Count: %{{value}}<extra></extra>",
+    textposition="inside"
 )
 
 donut_fig.update_layout(margin=dict(t=60, b=40))
+
 st.plotly_chart(donut_fig, use_container_width=True)
