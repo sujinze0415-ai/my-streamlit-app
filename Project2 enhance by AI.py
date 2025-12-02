@@ -110,44 +110,16 @@ def main():
 	# Bar chart metric selection
 	metric_choice = st.sidebar.selectbox("Bar chart metric", ["Total Revenue", "Total Costs", "Total Profit"]) 
 
+	# Scatter: min products sold
+	qty_candidates = [c for c in df.columns if any(x in c.lower() for x in ["sold", "quantity", "units", "number_of_products"])]
+	qty_col = qty_candidates[0] if qty_candidates else None
+	min_sold = int(st.sidebar.number_input("Minimum number of products sold (for scatter)", min_value=0, value=0))
+
 	# Donut category choice
 	donut_options = [opt for opt in [inspect_col, customer_demo_col] if opt in df.columns]
 	if not donut_options:
 		donut_options = []
 	donut_choice = st.sidebar.selectbox("Donut category", options=donut_options if donut_options else ["None"])
-
-	# Quantity/units column detection (used for scatter point size)
-	qty_candidates = [c for c in df.columns if any(x in c.lower() for x in ["sold", "quantity", "units", "number_of_products"])]
-	qty_col = qty_candidates[0] if qty_candidates else None
-
-	# Helper to apply a set of filter selections to a dataframe
-	def apply_filters(df_to_filter, prod_sel, loc_sel, trans_sel, insp_sel, price_range_tuple):
-		d = df_to_filter.copy()
-		if prod_sel is not None and product_col in d.columns:
-			d = d[d[product_col].isin(prod_sel)]
-		if loc_sel is not None and location_col in d.columns:
-			d = d[d[location_col].isin(loc_sel)]
-		if trans_sel is not None and transport_col in d.columns:
-			d = d[d[transport_col].isin(trans_sel)]
-		if insp_sel is not None and inspect_col in d.columns:
-			d = d[d[inspect_col].isin(insp_sel)]
-		if price_col and price_range_tuple[0] is not None:
-			pmin, pmax = price_range_tuple
-			d = d[(d[price_col] >= pmin) & (d[price_col] <= pmax)]
-		return d
-
-	# Per-chart filters: allow each visual to opt into using the global filters or a custom set
-	st.sidebar.markdown("---")
-	st.sidebar.header("Per-chart filters")
-
-	# Local multiselect helper to render inside expanders/containers (not sidebar)
-	def local_multiselect_for(col, label, container, default_all=True, key_suffix=""):
-		if col in df.columns:
-			opts = sorted(df[col].dropna().unique().tolist())
-			default = opts if default_all else None
-			return container.multiselect(label, options=opts, default=default, key=f"{label}_{key_suffix}")
-		else:
-			return None
 
 	# Apply filters to create filtered_df
 	filtered = df.copy()
@@ -177,27 +149,10 @@ def main():
 	defect_candidates = [c for c in df.columns if "defect" in c.lower()]
 	defect_col = defect_candidates[0] if defect_candidates else None
 
-	# Inline KPI filters next to KPI cards
-	exp_kpi = st.expander("KPIs filters (local)", expanded=False)
-	use_global_kpi = exp_kpi.checkbox("Use global filters", value=True, key="use_global_kpi")
-	prod_sel_kpi = loc_sel_kpi = trans_sel_kpi = insp_sel_kpi = None
-	price_range_kpi = (price_min, price_max)
-	if not use_global_kpi:
-		prod_sel_kpi = local_multiselect_for(product_col, "KPIs: Product Type", exp_kpi, key_suffix="kpi_prod")
-		loc_sel_kpi = local_multiselect_for(location_col, "KPIs: Location", exp_kpi, key_suffix="kpi_loc")
-		trans_sel_kpi = local_multiselect_for(transport_col, "KPIs: Transportation Modes", exp_kpi, key_suffix="kpi_trans")
-		insp_sel_kpi = local_multiselect_for(inspect_col, "KPIs: Inspection Results", exp_kpi, key_suffix="kpi_insp")
-		if price_col and pd.api.types.is_numeric_dtype(df[price_col]):
-			pmin = float(df[price_col].min(skipna=True))
-			pmax = float(df[price_col].max(skipna=True))
-			price_range_kpi = exp_kpi.slider("KPIs: Price range", min_value=pmin, max_value=pmax, value=(pmin, pmax), key="price_kpi")
-
-	kpi_df = filtered if use_global_kpi else apply_filters(df, prod_sel_kpi, loc_sel_kpi, trans_sel_kpi, insp_sel_kpi, price_range_kpi)
-
-	total_rev = kpi_df[rev_col].sum() if rev_col in kpi_df.columns else np.nan
-	total_costs = kpi_df[cost_col].sum() if cost_col in kpi_df.columns else np.nan
+	total_rev = filtered[rev_col].sum() if rev_col in filtered.columns else np.nan
+	total_costs = filtered[cost_col].sum() if cost_col in filtered.columns else np.nan
 	total_profit = (total_rev - total_costs) if (not np.isnan(total_rev) and not np.isnan(total_costs)) else np.nan
-	avg_defect = kpi_df[defect_col].mean() if defect_col in kpi_df.columns else np.nan
+	avg_defect = filtered[defect_col].mean() if defect_col in filtered.columns else np.nan
 
 	# Compute deltas relative to the full dataset totals (for quick context)
 	overall_rev = df[rev_col].sum() if rev_col in df.columns else np.nan
@@ -230,7 +185,7 @@ def main():
 		k4.metric("Avg Defect Rate", "N/A")
 
 	# small caption about row count
-	st.caption(f"Showing {len(kpi_df):,} rows for KPIs — global dataset total {len(df):,} rows")
+	st.caption(f"Showing {len(filtered):,} rows — dataset total {len(df):,} rows")
 
 	st.markdown("---")
 
@@ -240,24 +195,8 @@ def main():
 	# Bar chart by PRODUCT_TYPE — improved with labels and sorting
 	with left:
 		st.subheader("Bar chart by Product Type")
-		# Bar chart: inline local filters
-		exp_bar = st.expander("Bar filters", expanded=False)
-		use_global_bar = exp_bar.checkbox("Use global filters", value=True, key="use_global_bar")
-		prod_sel_bar = loc_sel_bar = trans_sel_bar = insp_sel_bar = None
-		price_range_bar = (price_min, price_max)
-		if not use_global_bar:
-			prod_sel_bar = local_multiselect_for(product_col, "Bar: Product Type", exp_bar, key_suffix="bar_prod")
-			loc_sel_bar = local_multiselect_for(location_col, "Bar: Location", exp_bar, key_suffix="bar_loc")
-			trans_sel_bar = local_multiselect_for(transport_col, "Bar: Transportation Modes", exp_bar, key_suffix="bar_trans")
-			insp_sel_bar = local_multiselect_for(inspect_col, "Bar: Inspection Results", exp_bar, key_suffix="bar_insp")
-			if price_col and pd.api.types.is_numeric_dtype(df[price_col]):
-				pmin = float(df[price_col].min(skipna=True))
-				pmax = float(df[price_col].max(skipna=True))
-				price_range_bar = exp_bar.slider("Bar: Price range", min_value=pmin, max_value=pmax, value=(pmin, pmax), key="price_bar")
-
-		bar_source = filtered if use_global_bar else apply_filters(df, prod_sel_bar, loc_sel_bar, trans_sel_bar, insp_sel_bar, price_range_bar)
-		if product_col in bar_source.columns:
-			grp = bar_source.groupby(product_col)
+		if product_col in filtered.columns:
+			grp = filtered.groupby(product_col)
 			if metric_choice == "Total Revenue":
 				series = grp[rev_col].sum() if rev_col in filtered.columns else pd.Series([])
 				y_label = "Revenue"
@@ -276,7 +215,7 @@ def main():
 			bar_df.columns = [product_col, "value"]
 			bar_df = bar_df.sort_values("value", ascending=False)
 			# Add count per product for hover
-			counts = bar_source[product_col].value_counts().reindex(bar_df[product_col]).fillna(0).values
+			counts = filtered[product_col].value_counts().reindex(bar_df[product_col]).fillna(0).values
 			bar_df["count"] = counts
 			fig_bar = px.bar(
 				bar_df,
@@ -289,36 +228,16 @@ def main():
 				color_discrete_sequence=px.colors.qualitative.Set2,
 			)
 			fig_bar.update_traces(texttemplate='%{text:,.0f}', textposition='outside', showlegend=False)
-			fig_bar.update_layout(uniformtext_minsize=8, uniformtext_mode='hide', yaxis_title=y_label, xaxis_tickangle=-45, height=520, margin=dict(l=40,r=40,t=60,b=40))
+			fig_bar.update_layout(uniformtext_minsize=8, uniformtext_mode='hide', yaxis_title=y_label, xaxis_tickangle=-45, height=450)
 			st.plotly_chart(fig_bar, use_container_width=True)
-			# spacing
-			st.markdown("<br>", unsafe_allow_html=True)
 		else:
 			st.info("No product type column found for bar chart.")
 
 		st.subheader("Costs vs Revenue (scatter)")
-		# Scatter: inline local filters and min_sold control
-		exp_scatter = st.expander("Scatter filters", expanded=False)
-		use_global_scatter = exp_scatter.checkbox("Use global filters", value=True, key="use_global_scatter")
-		prod_sel_scat = loc_sel_scat = trans_sel_scat = insp_sel_scat = None
-		price_range_scat = (price_min, price_max)
-		min_sold_local = 0
-		if not use_global_scatter:
-			prod_sel_scat = local_multiselect_for(product_col, "Scatter: Product Type", exp_scatter, key_suffix="scat_prod")
-			loc_sel_scat = local_multiselect_for(location_col, "Scatter: Location", exp_scatter, key_suffix="scat_loc")
-			trans_sel_scat = local_multiselect_for(transport_col, "Scatter: Transportation Modes", exp_scatter, key_suffix="scat_trans")
-			insp_sel_scat = local_multiselect_for(inspect_col, "Scatter: Inspection Results", exp_scatter, key_suffix="scat_insp")
-			if price_col and pd.api.types.is_numeric_dtype(df[price_col]):
-				pmin = float(df[price_col].min(skipna=True))
-				pmax = float(df[price_col].max(skipna=True))
-				price_range_scat = exp_scatter.slider("Scatter: Price range", min_value=pmin, max_value=pmax, value=(pmin, pmax), key="price_scatter")
-			min_sold_local = int(exp_scatter.number_input("Minimum number of products sold (for scatter)", min_value=0, value=0, key="min_sold_scatter"))
-
-		scatter_source = filtered if use_global_scatter else apply_filters(df, prod_sel_scat, loc_sel_scat, trans_sel_scat, insp_sel_scat, price_range_scat)
-		if (cost_col in scatter_source.columns) and (rev_col in scatter_source.columns):
-			scatter_df = scatter_source.copy()
+		if (cost_col in filtered.columns) and (rev_col in filtered.columns):
+			scatter_df = filtered.copy()
 			if qty_col and qty_col in scatter_df.columns:
-				scatter_df = scatter_df[scatter_df[qty_col] >= min_sold_local]
+				scatter_df = scatter_df[scatter_df[qty_col] >= min_sold]
 
 			if scatter_df.empty:
 				st.info("No data for scatter after applying minimum products sold filter.")
@@ -349,33 +268,16 @@ def main():
 				min_xy = min(scatter_df[cost_col].min(), scatter_df[rev_col].min())
 				max_xy = max(scatter_df[cost_col].max(), scatter_df[rev_col].max())
 				fig_scatter.add_shape(type="line", x0=min_xy, y0=min_xy, x1=max_xy, y1=max_xy, line=dict(dash='dash', color='gray'))
-				fig_scatter.update_layout(height=520, margin=dict(l=40,r=40,t=60,b=40))
+				fig_scatter.update_layout(height=450)
 				st.plotly_chart(fig_scatter, use_container_width=True)
-				st.markdown("<br>", unsafe_allow_html=True)
 		else:
 			st.info("Revenue or Costs column not found for scatter plot.")
 
 	# Right column: heatmap and donut
 	with right:
 		st.subheader("Heatmap: Avg Defect Rate")
-		# Heatmap: inline local filters
-		exp_heat = st.expander("Heatmap filters", expanded=False)
-		use_global_heat = exp_heat.checkbox("Use global filters", value=True, key="use_global_heat")
-		prod_sel_heat = loc_sel_heat = trans_sel_heat = insp_sel_heat = None
-		price_range_heat = (price_min, price_max)
-		if not use_global_heat:
-			prod_sel_heat = local_multiselect_for(product_col, "Heatmap: Product Type", exp_heat, key_suffix="heat_prod")
-			loc_sel_heat = local_multiselect_for(location_col, "Heatmap: Location", exp_heat, key_suffix="heat_loc")
-			trans_sel_heat = local_multiselect_for(transport_col, "Heatmap: Transportation Modes", exp_heat, key_suffix="heat_trans")
-			insp_sel_heat = local_multiselect_for(inspect_col, "Heatmap: Inspection Results", exp_heat, key_suffix="heat_insp")
-			if price_col and pd.api.types.is_numeric_dtype(df[price_col]):
-				pmin = float(df[price_col].min(skipna=True))
-				pmax = float(df[price_col].max(skipna=True))
-				price_range_heat = exp_heat.slider("Heatmap: Price range", min_value=pmin, max_value=pmax, value=(pmin, pmax), key="price_heat")
-
-		heat_source = filtered if use_global_heat else apply_filters(df, prod_sel_heat, loc_sel_heat, trans_sel_heat, insp_sel_heat, price_range_heat)
-		if (location_col in heat_source.columns) and (transport_col in heat_source.columns) and (defect_col in heat_source.columns):
-			heat = heat_source.groupby([location_col, transport_col])[defect_col].mean().reset_index()
+		if (location_col in filtered.columns) and (transport_col in filtered.columns) and (defect_col in filtered.columns):
+			heat = filtered.groupby([location_col, transport_col])[defect_col].mean().reset_index()
 			pivot = heat.pivot(index=location_col, columns=transport_col, values=defect_col).fillna(0)
 			z = pivot.values
 			x = pivot.columns.astype(str)
@@ -391,31 +293,14 @@ def main():
 					else:
 						txt = f"{val*100:.1f}%" if val <= 1 else f"{val:.2f}"
 					annotations.append(dict(x=xj, y=yi, text=txt, showarrow=False, font=dict(color='white' if val > z.max()/2 else 'black')))
-			fig_heat.update_layout(annotations=annotations, xaxis_title=transport_col, yaxis_title=location_col, height=520, margin=dict(l=40,r=40,t=60,b=40))
+			fig_heat.update_layout(annotations=annotations, xaxis_title=transport_col, yaxis_title=location_col, height=420)
 			st.plotly_chart(fig_heat, use_container_width=True)
-			st.markdown("<br>", unsafe_allow_html=True)
 		else:
 			st.info("Require LOCATION, TRANSPORTATION_MODES and a defect rate column for heatmap.")
 
 		st.subheader("Donut chart")
-		# Donut: inline local filters
-		exp_donut = st.expander("Donut filters", expanded=False)
-		use_global_donut = exp_donut.checkbox("Use global filters", value=True, key="use_global_donut")
-		prod_sel_donut = loc_sel_donut = trans_sel_donut = insp_sel_donut = None
-		price_range_donut = (price_min, price_max)
-		if not use_global_donut:
-			prod_sel_donut = local_multiselect_for(product_col, "Donut: Product Type", exp_donut, key_suffix="donut_prod")
-			loc_sel_donut = local_multiselect_for(location_col, "Donut: Location", exp_donut, key_suffix="donut_loc")
-			trans_sel_donut = local_multiselect_for(transport_col, "Donut: Transportation Modes", exp_donut, key_suffix="donut_trans")
-			insp_sel_donut = local_multiselect_for(inspect_col, "Donut: Inspection Results", exp_donut, key_suffix="donut_insp")
-			if price_col and pd.api.types.is_numeric_dtype(df[price_col]):
-				pmin = float(df[price_col].min(skipna=True))
-				pmax = float(df[price_col].max(skipna=True))
-				price_range_donut = exp_donut.slider("Donut: Price range", min_value=pmin, max_value=pmax, value=(pmin, pmax), key="price_donut")
-
-		donut_source = filtered if use_global_donut else apply_filters(df, prod_sel_donut, loc_sel_donut, trans_sel_donut, insp_sel_donut, price_range_donut)
-		if donut_choice and donut_choice in donut_source.columns:
-			vc = donut_source[donut_choice].value_counts(dropna=False)
+		if donut_choice and donut_choice in filtered.columns:
+			vc = filtered[donut_choice].value_counts(dropna=False)
 			donut_df = vc.reset_index()
 			donut_df.columns = [donut_choice, "count"]
 			donut_df["pct"] = donut_df["count"] / donut_df["count"].sum()
@@ -432,7 +317,7 @@ def main():
 
 			fig_donut = go.Figure(data=[go.Pie(labels=plot_df[donut_choice], values=plot_df["count"], hole=0.55)])
 			fig_donut.update_traces(textinfo='percent+label', hovertemplate='%{label}: %{value} (%{percent})')
-			fig_donut.update_layout(height=520, margin=dict(l=40,r=40,t=60,b=40))
+			fig_donut.update_layout(height=400)
 			st.plotly_chart(fig_donut, use_container_width=True)
 		else:
 			st.info("No category selected or column missing for donut chart.")
