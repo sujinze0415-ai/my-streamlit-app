@@ -93,7 +93,7 @@ price_min, price_max = st.sidebar.slider(
     value=(min_price, max_price),
 )
 
-# Min number of products sold (for scatter plot)
+# Minimum units sold (used in scatter plot)
 min_sold = st.sidebar.number_input(
     "Minimum NUMBER_OF_PRODUCTS_SOLD (for scatter plot)",
     min_value=0,
@@ -107,7 +107,7 @@ donut_category = st.sidebar.selectbox(
 )
 
 
-# Apply all filters to create filtered_df
+# Apply all filters
 filtered_df = df.copy()
 filtered_df = filtered_df[filtered_df["PRODUCT_TYPE"].isin(selected_products)]
 filtered_df = filtered_df[filtered_df["LOCATION"].isin(selected_locations)]
@@ -117,13 +117,13 @@ filtered_df = filtered_df[
     (filtered_df["PRICE"] >= price_min) & (filtered_df["PRICE"] <= price_max)
 ]
 
-# If no rows after filtering, show warning and stop
+# If no rows remain, stop execution
 if filtered_df.empty:
     st.warning("No data after applying filters. Please relax the filter settings.")
     st.stop()
 
 # -------------------------------
-# 4. Show KPI summary  (Student-enhanced)
+# 4. KPI Summary (Student-enhanced)
 # -------------------------------
 total_revenue = filtered_df["REVENUE_GENERATED"].sum()
 total_costs = filtered_df["COSTS"].sum()
@@ -132,21 +132,17 @@ avg_defect_rate = filtered_df["DEFECT_RATES"].mean()
 
 kpi1, kpi2, kpi3, kpi4 = st.columns(4)
 
-# Student-enhanced: Add currency symbol and integer formatting to better reflect a business view
+# Student-enhanced: clearer formatting with currency and percentages
 kpi1.metric("Total Revenue (USD)", f"${total_revenue:,.0f}")
-
 kpi2.metric("Total Costs (USD)", f"${total_costs:,.0f}")
-
-# Student-enhanced: Display profit in USD format
 kpi3.metric("Total Profit (USD)", f"${total_profit:,.0f}")
-
-# Student-enhanced: Clearly display defect rates as percentages
 kpi4.metric("Average Defect Rate", f"{avg_defect_rate * 100:.2f}%")
 
 st.markdown("---")
 
+
 # -------------------------------
-# 5. Bar chart by PRODUCT_TYPE  (Student-enhanced)
+# 5. Bar Chart by PRODUCT_TYPE (Student-enhanced)
 # -------------------------------
 st.subheader("Bar Chart by Product Type")
 
@@ -161,13 +157,13 @@ if metric_option == "Total Revenue":
     bar_data = grouped["REVENUE_GENERATED"].sum().reset_index(name="VALUE")
 elif metric_option == "Total Costs":
     bar_data = grouped["COSTS"].sum().reset_index(name="VALUE")
-else:  
+else:
     bar_data = (
         grouped["REVENUE_GENERATED"].sum()
         - grouped["COSTS"].sum()
     ).reset_index(name="VALUE")
 
-# Student-enhanced: 使用一套更有对比度的色盘，每个 PRODUCT_TYPE 一种颜色
+# Student-enhanced: qualitative color palette and labeled bars
 bar_fig = px.bar(
     bar_data,
     x="PRODUCT_TYPE",
@@ -178,7 +174,6 @@ bar_fig = px.bar(
     title=f"{metric_option} by Product Type (Student-enhanced)",
 )
 
-# Student-enhanced: 给每个柱子显示数值
 bar_fig.update_traces(
     text=bar_data["VALUE"].round(0),
     textposition="outside",
@@ -191,8 +186,9 @@ bar_fig.update_layout(
 
 st.plotly_chart(bar_fig, use_container_width=True)
 
+
 # -------------------------------
-# 6. Scatter plot: costs vs revenue  (Student-enhanced)
+# 6. Scatter Plot (Student-enhanced)
 # -------------------------------
 st.subheader("Scatter Plot: Costs vs Revenue")
 
@@ -200,23 +196,22 @@ scatter_df = filtered_df.copy()
 scatter_df = scatter_df[scatter_df["NUMBER_OF_PRODUCTS_SOLD"] >= min_sold]
 
 if scatter_df.empty:
-    st.info("No data for scatter plot after applying minimum NUMBER_OF_PRODUCTS_SOLD.")
+    st.info("No data for scatter plot under the current filters.")
 else:
-    # Student-enhanced：交互一：用户可以选择按 PRODUCT_TYPE 或 LOCATION 上色
+    # Student-enhanced: user can choose color dimension
     color_choice = st.selectbox(
         "Color points by",
         options=["PRODUCT_TYPE", "LOCATION"],
-        index=0 if "PRODUCT_TYPE" in scatter_df.columns else 1,
+        index=0,
     )
 
     hover_cols = [c for c in ["SKU", "LOCATION", "PRODUCT_TYPE"] if c in scatter_df.columns]
 
-    # Student-enhanced：颜色使用不同调色板
     scatter_fig = px.scatter(
         scatter_df,
         x="COSTS",
         y="REVENUE_GENERATED",
-        color=color_choice if color_choice in scatter_df.columns else None,
+        color=color_choice,
         size="NUMBER_OF_PRODUCTS_SOLD",
         hover_data=hover_cols,
         labels={"COSTS": "Costs (USD)", "REVENUE_GENERATED": "Revenue (USD)"},
@@ -232,14 +227,13 @@ else:
 
     st.plotly_chart(scatter_fig, use_container_width=True)
 
-    # Student-enhanced：简单文字说明，方便展示时讲解
     st.caption(
         "Higher points indicate higher revenue. Larger bubbles represent products with more units sold."
     )
 
 
 # -------------------------------
-# 7. Heatmap of defect rates  (Student-enhanced)
+# 7. Heatmap of Defect Rates (Student-enhanced)
 # -------------------------------
 st.subheader("Heatmap of Average Defect Rates")
 
@@ -262,14 +256,13 @@ heat_fig = px.imshow(
         color="Avg Defect Rate"
     ),
     title="Average Defect Rates by Location and Transport",
-    # Student-enhanced：使用更对比明显的颜色
-    color_continuous_scale="Reds",
+    color_continuous_scale="Reds",    # Student-enhanced: stronger color contrast
     aspect="auto",
 )
 
-# Student-enhanced：在热力图中显示数值（以百分比形式）
+# Student-enhanced: show percentage values inside heatmap cells
 heat_fig.update_traces(
-    text=(heat_pivot.values * 100).round(1),  # 百分比保留一位小数
+    text=(heat_pivot.values * 100).round(1),
     texttemplate="%{text}%",
     textfont=dict(size=10),
 )
@@ -280,15 +273,15 @@ heat_fig.update_layout(
 
 st.plotly_chart(heat_fig, use_container_width=True)
 
-st.caption("Darker cells indicate higher defect rates. Values are shown as percentages.")
+st.caption("Darker cells indicate higher defect rates. Values are displayed as percentages.")
 
 
 # -------------------------------
-# 8. Donut chart  (Student-enhanced)
+# 8. Donut Chart (Student-enhanced)
 # -------------------------------
 st.subheader("Donut Chart")
 
-# Student-enhanced：交互一：用户可以临时切换 Donut 维度
+# Student-enhanced: user can switch donut category interactively
 donut_category = st.selectbox(
     "Select category for donut chart",
     options=["INSPECTION_RESULTS", "CUSTOMER_DEMOGRAPHICS"],
@@ -311,7 +304,6 @@ donut_fig = px.pie(
     color_discrete_sequence=px.colors.qualitative.Pastel,
 )
 
-# Student-enhanced：在图内显示百分比 + 标签，在 hover 里显示数量
 donut_fig.update_traces(
     textinfo="percent+label",
     textposition="inside",
