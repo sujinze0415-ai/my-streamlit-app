@@ -121,6 +121,51 @@ def main():
 		donut_options = []
 	donut_choice = st.sidebar.selectbox("Donut category", options=donut_options if donut_options else ["None"])
 
+	# Helper to apply a set of filter selections to a dataframe
+	def apply_filters(df_to_filter, prod_sel, loc_sel, trans_sel, insp_sel, price_range_tuple):
+		d = df_to_filter.copy()
+		if prod_sel is not None and product_col in d.columns:
+			d = d[d[product_col].isin(prod_sel)]
+		if loc_sel is not None and location_col in d.columns:
+			d = d[d[location_col].isin(loc_sel)]
+		if trans_sel is not None and transport_col in d.columns:
+			d = d[d[transport_col].isin(trans_sel)]
+		if insp_sel is not None and inspect_col in d.columns:
+			d = d[d[inspect_col].isin(insp_sel)]
+		if price_col and price_range_tuple[0] is not None:
+			pmin, pmax = price_range_tuple
+			d = d[(d[price_col] >= pmin) & (d[price_col] <= pmax)]
+		return d
+
+	# Per-chart filters: allow each visual to opt into using the global filters or a custom set
+	st.sidebar.markdown("---")
+	st.sidebar.header("Per-chart filters")
+
+	# Generic helper to render multiselects within an expander
+	def chart_filters_ui(name, use_default=True):
+		exp = st.sidebar.expander(f"{name} filters", expanded=False)
+		use_global = exp.checkbox("Use global filters", value=use_default, key=f"use_global_{name}")
+		prod_sel = loc_sel = trans_sel = insp_sel = None
+		price_range = (price_min, price_max)
+		if not use_global:
+			with exp:
+				prod_sel = multiselect_for(product_col, f"{name}: Product Type")
+				loc_sel = multiselect_for(location_col, f"{name}: Location")
+				trans_sel = multiselect_for(transport_col, f"{name}: Transportation Modes")
+				insp_sel = multiselect_for(inspect_col, f"{name}: Inspection Results")
+				# price range only if price column exists
+				if price_col and pd.api.types.is_numeric_dtype(df[price_col]):
+					pmin = float(df[price_col].min(skipna=True))
+					pmax = float(df[price_col].max(skipna=True))
+					price_range = exp.slider(f"{name}: Price range", min_value=pmin, max_value=pmax, value=(pmin, pmax), key=f"price_{name}")
+		return dict(use_global=use_global, prod_sel=prod_sel, loc_sel=loc_sel, trans_sel=trans_sel, insp_sel=insp_sel, price_range=price_range)
+
+	# Create per-chart filter selections for KPIs, Bar, Scatter, Heatmap
+	kpi_filters = chart_filters_ui("KPIs", use_default=True)
+	bar_filters = chart_filters_ui("Bar", use_default=True)
+	scatter_filters = chart_filters_ui("Scatter", use_default=True)
+	heatmap_filters = chart_filters_ui("Heatmap", use_default=True)
+
 	# Apply filters to create filtered_df
 	filtered = df.copy()
 	# Apply product filter
@@ -149,10 +194,16 @@ def main():
 	defect_candidates = [c for c in df.columns if "defect" in c.lower()]
 	defect_col = defect_candidates[0] if defect_candidates else None
 
-	total_rev = filtered[rev_col].sum() if rev_col in filtered.columns else np.nan
-	total_costs = filtered[cost_col].sum() if cost_col in filtered.columns else np.nan
+	# Determine which dataframe to use for KPIs (global filtered or its own filters)
+	if kpi_filters.get("use_global", True):
+		kpi_df = filtered
+	else:
+		kpi_df = apply_filters(df, kpi_filters.get("prod_sel"), kpi_filters.get("loc_sel"), kpi_filters.get("trans_sel"), kpi_filters.get("insp_sel"), kpi_filters.get("price_range"))
+
+	total_rev = kpi_df[rev_col].sum() if rev_col in kpi_df.columns else np.nan
+	total_costs = kpi_df[cost_col].sum() if cost_col in kpi_df.columns else np.nan
 	total_profit = (total_rev - total_costs) if (not np.isnan(total_rev) and not np.isnan(total_costs)) else np.nan
-	avg_defect = filtered[defect_col].mean() if defect_col in filtered.columns else np.nan
+	avg_defect = kpi_df[defect_col].mean() if defect_col in kpi_df.columns else np.nan
 
 	# Compute deltas relative to the full dataset totals (for quick context)
 	overall_rev = df[rev_col].sum() if rev_col in df.columns else np.nan
@@ -185,7 +236,7 @@ def main():
 		k4.metric("Avg Defect Rate", "N/A")
 
 	# small caption about row count
-	st.caption(f"Showing {len(filtered):,} rows — dataset total {len(df):,} rows")
+	st.caption(f"Showing {len(kpi_df):,} rows for KPIs — global dataset total {len(df):,} rows")
 
 	st.markdown("---")
 
@@ -195,8 +246,10 @@ def main():
 	# Bar chart by PRODUCT_TYPE — improved with labels and sorting
 	with left:
 		st.subheader("Bar chart by Product Type")
-		if product_col in filtered.columns:
-			grp = filtered.groupby(product_col)
+		# bar chart may use its own filters
+		bar_source = filtered if bar_filters.get("use_global", True) else apply_filters(df, bar_filters.get("prod_sel"), bar_filters.get("loc_sel"), bar_filters.get("trans_sel"), bar_filters.get("insp_sel"), bar_filters.get("price_range"))
+		if product_col in bar_source.columns:
+			grp = bar_source.groupby(product_col)
 			if metric_choice == "Total Revenue":
 				series = grp[rev_col].sum() if rev_col in filtered.columns else pd.Series([])
 				y_label = "Revenue"
@@ -215,7 +268,7 @@ def main():
 			bar_df.columns = [product_col, "value"]
 			bar_df = bar_df.sort_values("value", ascending=False)
 			# Add count per product for hover
-			counts = filtered[product_col].value_counts().reindex(bar_df[product_col]).fillna(0).values
+			counts = bar_source[product_col].value_counts().reindex(bar_df[product_col]).fillna(0).values
 			bar_df["count"] = counts
 			fig_bar = px.bar(
 				bar_df,
@@ -234,8 +287,10 @@ def main():
 			st.info("No product type column found for bar chart.")
 
 		st.subheader("Costs vs Revenue (scatter)")
-		if (cost_col in filtered.columns) and (rev_col in filtered.columns):
-			scatter_df = filtered.copy()
+		# scatter may use its own filters
+		scatter_source = filtered if scatter_filters.get("use_global", True) else apply_filters(df, scatter_filters.get("prod_sel"), scatter_filters.get("loc_sel"), scatter_filters.get("trans_sel"), scatter_filters.get("insp_sel"), scatter_filters.get("price_range"))
+		if (cost_col in scatter_source.columns) and (rev_col in scatter_source.columns):
+			scatter_df = scatter_source.copy()
 			if qty_col and qty_col in scatter_df.columns:
 				scatter_df = scatter_df[scatter_df[qty_col] >= min_sold]
 
@@ -276,8 +331,10 @@ def main():
 	# Right column: heatmap and donut
 	with right:
 		st.subheader("Heatmap: Avg Defect Rate")
-		if (location_col in filtered.columns) and (transport_col in filtered.columns) and (defect_col in filtered.columns):
-			heat = filtered.groupby([location_col, transport_col])[defect_col].mean().reset_index()
+		# heatmap may use its own filters
+		heat_source = filtered if heatmap_filters.get("use_global", True) else apply_filters(df, heatmap_filters.get("prod_sel"), heatmap_filters.get("loc_sel"), heatmap_filters.get("trans_sel"), heatmap_filters.get("insp_sel"), heatmap_filters.get("price_range"))
+		if (location_col in heat_source.columns) and (transport_col in heat_source.columns) and (defect_col in heat_source.columns):
+			heat = heat_source.groupby([location_col, transport_col])[defect_col].mean().reset_index()
 			pivot = heat.pivot(index=location_col, columns=transport_col, values=defect_col).fillna(0)
 			z = pivot.values
 			x = pivot.columns.astype(str)
