@@ -5,9 +5,10 @@ import plotly.express as px
 # -----------------------
 # 1. Start dashboard app
 # -----------------------
+# Student-enhanced: use wide layout and a more expressive title with emoji
 st.set_page_config(page_title="Supply Chain Dashboard", layout="wide")
 
-# Fun title with emoji
+# Student-enhanced: fun title and caption instead of a plain title
 st.title("📦 Supply Chain Performance Dashboard")
 st.caption(
     "Explore key metrics, product performance, and quality patterns across the supply chain."
@@ -61,9 +62,10 @@ if missing:
 # -------------------------------
 # 3. Create global filters
 # -------------------------------
+# Student-enhanced: sidebar header with icon and friendly text
 st.sidebar.header("🔍 Global Filters")
 
-# Sidebar mini-intro
+# Student-enhanced: small sidebar info card explaining the filters
 st.sidebar.info(
     "Use these filters to slice the entire dashboard.\n\n"
     "All KPIs and visualizations are linked to the same filtered data."
@@ -110,14 +112,14 @@ min_sold = st.sidebar.number_input(
     value=0,
 )
 
-# Default donut category (can be overridden in the Donut tab)
+# Student-enhanced: default donut category selection in the sidebar
 donut_category_initial = st.sidebar.selectbox(
     "Default donut category",
     options=["INSPECTION_RESULTS", "CUSTOMER_DEMOGRAPHICS"],
 )
 
 
-# Apply all filters
+# Apply all filters to create a single filtered_df
 filtered_df = df.copy()
 filtered_df = filtered_df[filtered_df["PRODUCT_TYPE"].isin(selected_products)]
 filtered_df = filtered_df[filtered_df["LOCATION"].isin(selected_locations)]
@@ -132,14 +134,15 @@ if filtered_df.empty:
     st.warning("No data after applying filters. Please relax the filter settings.")
     st.stop()
 
-# Add a small status line under the title
+# Student-enhanced: show how many records are currently displayed
 st.markdown(
     f"✅ Showing **{len(filtered_df):,}** records after applying current filters."
 )
 
 # -------------------------------
-# 4. Tabs layout
+# 4. Tabbed layout
 # -------------------------------
+# Student-enhanced: use tabs to organize the dashboard into logical sections
 overview_tab, product_tab, performance_tab, quality_tab = st.tabs(
     ["📊 Overview", "🧷 Product View", "⚙️ Performance", "✅ Quality & Segments"]
 )
@@ -157,19 +160,22 @@ with overview_tab:
 
     kpi1, kpi2, kpi3, kpi4 = st.columns(4)
 
-    # Student-enhanced: clearer formatting with currency and percentages
+    # Student-enhanced: add emojis and clearer labels for KPIs
     kpi1.metric("Total Revenue (USD) 💰", f"${total_revenue:,.0f}")
     kpi2.metric("Total Costs (USD) 💸", f"${total_costs:,.0f}")
     kpi3.metric("Total Profit (USD) 📈", f"${total_profit:,.0f}")
     kpi4.metric("Average Defect Rate ⚠️", f"{avg_defect_rate * 100:.2f}%")
 
+    # Student-enhanced: helpful caption tied to filter behavior
     st.caption(
         "These KPIs are calculated from the filtered dataset and update when you change the filters on the left."
     )
 
     st.markdown("---")
 
-    # Bar chart by product type
+    # -------------------------------
+    # Bar chart by PRODUCT_TYPE
+    # -------------------------------
     st.subheader("Product Performance Overview")
 
     metric_option = st.selectbox(
@@ -190,6 +196,7 @@ with overview_tab:
             - grouped["COSTS"].sum()
         ).reset_index(name="VALUE")
 
+    # Student-enhanced: color by product and use a qualitative palette
     bar_fig = px.bar(
         bar_data,
         x="PRODUCT_TYPE",
@@ -200,11 +207,13 @@ with overview_tab:
         title=f"{metric_option} by Product Type (Student-enhanced)",
     )
 
+    # Student-enhanced: show numeric values on top of bars
     bar_fig.update_traces(
         text=bar_data["VALUE"].round(0),
         textposition="outside",
     )
 
+    # Student-enhanced: rotate x labels and adjust margins for readability
     bar_fig.update_layout(
         xaxis_tickangle=-30,
         margin=dict(t=60, b=80),
@@ -215,16 +224,17 @@ with overview_tab:
 
 
 # ===========================
-# TAB 2: Product View (Bar only, optional extras later)
+# TAB 2: Product View
 # ===========================
 with product_tab:
     st.subheader("Product Mix and Revenue Focus")
 
+    # Student-enhanced: short descriptive text to guide interpretation
     st.write(
         "This view helps us compare how different product types contribute to overall performance."
     )
 
-    # Reuse same bar chart for now; you can later add another chart here if needed
+    # Student-enhanced: reuse bar chart here as a dedicated product view
     product_bar_fig = px.bar(
         bar_data,
         x="PRODUCT_TYPE",
@@ -261,6 +271,7 @@ with performance_tab:
             "No data for the scatter plot under the current filters and minimum units sold."
         )
     else:
+        # Student-enhanced: allow user to choose how to color points
         color_choice = st.selectbox(
             "Color points by",
             options=["PRODUCT_TYPE", "LOCATION"],
@@ -272,6 +283,7 @@ with performance_tab:
             c for c in ["SKU", "LOCATION", "PRODUCT_TYPE"] if c in scatter_df.columns
         ]
 
+        # Student-enhanced: use qualitative color palette and clear labels
         scatter_fig = px.scatter(
             scatter_df,
             x="COSTS",
@@ -292,6 +304,7 @@ with performance_tab:
 
         st.plotly_chart(scatter_fig, use_container_width=True)
 
+        # Student-enhanced: caption to help business users interpret the chart
         st.caption(
             "Each bubble shows one record in the filtered dataset. "
             "Higher points indicate higher revenue; larger bubbles represent more units sold."
@@ -315,6 +328,7 @@ with quality_tab:
         values="DEFECT_RATES",
     )
 
+    # Student-enhanced: use a strong red color scale and meaningful title
     heat_fig = px.imshow(
         heat_pivot,
         labels=dict(
@@ -327,6 +341,7 @@ with quality_tab:
         aspect="auto",
     )
 
+    # Student-enhanced: display defect rate percentages inside the cells
     heat_fig.update_traces(
         text=(heat_pivot.values * 100).round(1),
         texttemplate="%{text}%",
@@ -339,12 +354,16 @@ with quality_tab:
 
     st.plotly_chart(heat_fig, use_container_width=True)
 
-    st.caption("Darker cells indicate higher defect rates. Values are displayed as percentages.")
+    # Student-enhanced: explanatory caption for business users
+    st.caption(
+        "Darker cells indicate higher defect rates. Values are displayed as percentages."
+    )
 
     st.markdown("---")
 
     st.subheader("Category Distribution (Donut Chart)")
 
+    # Student-enhanced: allow selecting donut category inside the tab
     donut_category = st.selectbox(
         "Select category for donut chart",
         options=["INSPECTION_RESULTS", "CUSTOMER_DEMOGRAPHICS"],
@@ -363,6 +382,7 @@ with quality_tab:
         .rename(columns={"index": donut_category})
     )
 
+    # Student-enhanced: pastel colors, inside labels, and custom hover text
     donut_fig = px.pie(
         donut_counts,
         names=donut_category,
@@ -385,8 +405,10 @@ with quality_tab:
 
     st.plotly_chart(donut_fig, use_container_width=True)
 
+    # Student-enhanced: caption linking the donut back to business questions
     st.caption(
         "Use this donut chart to understand how records are distributed across "
         "inspection outcomes or customer segments."
     )
+
 
