@@ -187,7 +187,25 @@ bar_fig = px.bar(
     bar_data,
     x="PRODUCT_TYPE",
     y="VALUE",
-    la
+    labels={"PRODUCT_TYPE": "Product Type", "VALUE": metric_option},
+    title=f"{metric_option} by Product Type (Top {top_n})",
+    color="PRODUCT_TYPE",  # 每个产品类型一个颜色
+    color_discrete_sequence=color_seq,
+)
+
+# Student-enhanced：在柱子上标注数值
+bar_fig.update_traces(
+    text=bar_data["VALUE"].round(0),
+    textposition="outside",
+)
+
+bar_fig.update_layout(
+    xaxis_tickangle=-30,
+    margin=dict(t=80, b=80),
+)
+
+st.plotly_chart(bar_fig, use_container_width=True)
+
 
 # -------------------------------
 # 6. Scatter plot: costs vs revenue  (Student-enhanced)
