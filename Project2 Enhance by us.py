@@ -150,19 +150,9 @@ st.markdown("---")
 # -------------------------------
 st.subheader("Bar Chart by Product Type")
 
-# 选择指标
 metric_option = st.selectbox(
     "Select metric for bar chart",
     options=["Total Revenue", "Total Costs", "Total Profit"],
-)
-
-# Student-enhanced：交互一：选择显示 Top N 个产品类型
-top_n = st.slider(
-    "Number of top product types to display",
-    min_value=3,
-    max_value=10,
-    value=5,
-    step=1,
 )
 
 grouped = filtered_df.groupby("PRODUCT_TYPE")
@@ -171,29 +161,24 @@ if metric_option == "Total Revenue":
     bar_data = grouped["REVENUE_GENERATED"].sum().reset_index(name="VALUE")
 elif metric_option == "Total Costs":
     bar_data = grouped["COSTS"].sum().reset_index(name="VALUE")
-else:  # Total Profit
+else:  
     bar_data = (
         grouped["REVENUE_GENERATED"].sum()
         - grouped["COSTS"].sum()
     ).reset_index(name="VALUE")
 
-# Student-enhanced：按数值排序 + 只取 Top N
-bar_data = bar_data.sort_values("VALUE", ascending=False).head(top_n)
-
-# Student-enhanced：使用自定义颜色序列
-color_seq = px.colors.qualitative.Set2  # 不同类别颜色更明显
-
+# Student-enhanced: 使用一套更有对比度的色盘，每个 PRODUCT_TYPE 一种颜色
 bar_fig = px.bar(
     bar_data,
     x="PRODUCT_TYPE",
     y="VALUE",
-    labels={"PRODUCT_TYPE": "Product Type", "VALUE": metric_option},
-    title=f"{metric_option} by Product Type (Top {top_n})",
-    color="PRODUCT_TYPE",  # 每个产品类型一个颜色
-    color_discrete_sequence=color_seq,
+    color="PRODUCT_TYPE",
+    color_discrete_sequence=px.colors.qualitative.Set2,
+    labels={"VALUE": metric_option},
+    title=f"{metric_option} by Product Type (Student-enhanced)",
 )
 
-# Student-enhanced：在柱子上标注数值
+# Student-enhanced: 给每个柱子显示数值
 bar_fig.update_traces(
     text=bar_data["VALUE"].round(0),
     textposition="outside",
@@ -201,11 +186,10 @@ bar_fig.update_traces(
 
 bar_fig.update_layout(
     xaxis_tickangle=-30,
-    margin=dict(t=80, b=80),
+    margin=dict(t=60, b=80),
 )
 
 st.plotly_chart(bar_fig, use_container_width=True)
-
 
 # -------------------------------
 # 6. Scatter plot: costs vs revenue  (Student-enhanced)
