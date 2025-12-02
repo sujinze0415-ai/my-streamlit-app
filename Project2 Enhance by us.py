@@ -123,7 +123,7 @@ if filtered_df.empty:
     st.stop()
 
 # -------------------------------
-# 4. KPI Summary (Student-enhanced)
+# 4. KPI Summary 
 # -------------------------------
 total_revenue = filtered_df["REVENUE_GENERATED"].sum()
 total_costs = filtered_df["COSTS"].sum()
@@ -142,7 +142,7 @@ st.markdown("---")
 
 
 # -------------------------------
-# 5. Bar Chart by PRODUCT_TYPE (Student-enhanced)
+# 5. Bar Chart by PRODUCT_TYPE
 # -------------------------------
 st.subheader("Bar Chart by Product Type")
 
@@ -188,7 +188,7 @@ st.plotly_chart(bar_fig, use_container_width=True)
 
 
 # -------------------------------
-# 6. Scatter Plot (Student-enhanced)
+# 6. Scatter Plot  
 # -------------------------------
 st.subheader("Scatter Plot: Costs vs Revenue")
 
@@ -233,7 +233,7 @@ else:
 
 
 # -------------------------------
-# 7. Heatmap of Defect Rates (Student-enhanced)
+# 7. Heatmap of Defect Rates  
 # -------------------------------
 st.subheader("Heatmap of Average Defect Rates")
 
@@ -277,7 +277,7 @@ st.caption("Darker cells indicate higher defect rates. Values are displayed as p
 
 
 # -------------------------------
-# 8. Donut Chart (Student-enhanced)
+# 8. Donut Chart  
 # -------------------------------
 st.subheader("Donut Chart")
 
