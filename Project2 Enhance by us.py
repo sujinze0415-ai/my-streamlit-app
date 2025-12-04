@@ -6,8 +6,6 @@ import plotly.express as px
 # 1. Start dashboard app
 # -----------------------
 # Student-enhanced: use wide layout and a more expressive title with emoji
-st.set_page_config(page_title="Supply Chain Dashboard", layout="wide")
-
 # Student-enhanced: fun title and caption instead of a plain title
 st.title("📦 Supply Chain Performance Dashboard")
 st.caption(
