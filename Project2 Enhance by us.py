@@ -144,38 +144,38 @@ st.markdown(
 # -------------------------------
 st.subheader("Key Performance Indicators")
 
-    total_revenue = filtered_df["REVENUE_GENERATED"].sum()
-    total_costs = filtered_df["COSTS"].sum()
-    total_profit = total_revenue - total_costs
-    avg_defect_rate = filtered_df["DEFECT_RATES"].mean()
+total_revenue = filtered_df["REVENUE_GENERATED"].sum()
+total_costs = filtered_df["COSTS"].sum()
+total_profit = total_revenue - total_costs
+avg_defect_rate = filtered_df["DEFECT_RATES"].mean()
 
-    kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+kpi1, kpi2, kpi3, kpi4 = st.columns(4)
 
-    # Student-enhanced: add emojis and clearer labels for KPIs
-    kpi1.metric("Total Revenue (USD) 💰", f"${total_revenue:,.0f}")
-    kpi2.metric("Total Costs (USD) 💸", f"${total_costs:,.0f}")
-    kpi3.metric("Total Profit (USD) 📈", f"${total_profit:,.0f}")
-    kpi4.metric("Average Defect Rate ⚠️", f"{avg_defect_rate * 100:.2f}%")
+# Student-enhanced: add emojis and clearer labels for KPIs
+kpi1.metric("Total Revenue (USD) 💰", f"${total_revenue:,.0f}")
+kpi2.metric("Total Costs (USD) 💸", f"${total_costs:,.0f}")
+kpi3.metric("Total Profit (USD) 📈", f"${total_profit:,.0f}")
+kpi4.metric("Average Defect Rate ⚠️", f"{avg_defect_rate * 100:.2f}%")
 
-    # Student-enhanced: helpful caption tied to filter behavior
-    st.caption(
-        "These KPIs are calculated from the filtered dataset and update when you change the filters on the left."
-    )
+# Student-enhanced: helpful caption tied to filter behavior
+st.caption(
+"These KPIs are calculated from the filtered dataset and update when you change the filters on the left."
+)
 
-    st.markdown("---")
+st.markdown("---")
 
-    # -------------------------------
-    # Bar chart by PRODUCT_TYPE
-    # -------------------------------
-    st.subheader("Product Performance Overview")
+# -------------------------------
+# Bar chart by PRODUCT_TYPE
+# -------------------------------
+st.subheader("Product Performance Overview")
 
-    metric_option = st.selectbox(
+metric_option = st.selectbox(
         "Select metric for bar chart",
         options=["Total Revenue", "Total Costs", "Total Profit"],
         key="bar_metric",
-    )
+)
 
-    grouped = filtered_df.groupby("PRODUCT_TYPE")
+grouped = filtered_df.groupby("PRODUCT_TYPE")
 
     if metric_option == "Total Revenue":
         bar_data = grouped["REVENUE_GENERATED"].sum().reset_index(name="VALUE")
@@ -187,8 +187,8 @@ st.subheader("Key Performance Indicators")
             - grouped["COSTS"].sum()
         ).reset_index(name="VALUE")
 
-    # Student-enhanced: color by product and use a qualitative palette
-    bar_fig = px.bar(
+# Student-enhanced: color by product and use a qualitative palette
+bar_fig = px.bar(
         bar_data,
         x="PRODUCT_TYPE",
         y="VALUE",
@@ -196,172 +196,172 @@ st.subheader("Key Performance Indicators")
         color_discrete_sequence=px.colors.qualitative.Set2,
         labels={"VALUE": metric_option},
         title=f"{metric_option} by Product Type (Student-enhanced)",
-    )
+)
 
-    # Student-enhanced: show numeric values on top of bars
-    bar_fig.update_traces(
+# Student-enhanced: show numeric values on top of bars
+bar_fig.update_traces(
         text=bar_data["VALUE"].round(0),
         textposition="outside",
-    )
+)
 
-    # Student-enhanced: rotate x labels and adjust margins for readability
-    bar_fig.update_layout(
+# Student-enhanced: rotate x labels and adjust margins for readability
+bar_fig.update_layout(
         xaxis_tickangle=-30,
         margin=dict(t=60, b=80),
         showlegend=False,
-    )
+)
 
-    st.plotly_chart(bar_fig, use_container_width=True)
+st.plotly_chart(bar_fig, use_container_width=True)
 # ===========================
 # TAB 3: Performance (Scatter)
 # ===========================
-    st.subheader("Cost vs Revenue by Product / Location")
+st.subheader("Cost vs Revenue by Product / Location")
 
-    scatter_df = filtered_df.copy()
-    scatter_df = scatter_df[scatter_df["NUMBER_OF_PRODUCTS_SOLD"] >= min_sold]
+scatter_df = filtered_df.copy()
+scatter_df = scatter_df[scatter_df["NUMBER_OF_PRODUCTS_SOLD"] >= min_sold]
 
-    if scatter_df.empty:
+if scatter_df.empty:
         st.info(
             "No data for the scatter plot under the current filters and minimum units sold."
-        )
-    else:
-        # Student-enhanced: allow user to choose how to color points
-        color_choice = st.selectbox(
-            "Color points by",
-            options=["PRODUCT_TYPE", "LOCATION"],
-            index=0,
-            key="scatter_color",
-        )
+)
+else:
+# Student-enhanced: allow user to choose how to color points
+color_choice = st.selectbox(
+    "Color points by",
+    options=["PRODUCT_TYPE", "LOCATION"],
+    index=0,
+    key="scatter_color",
+)
 
-        hover_cols = [
-            c for c in ["SKU", "LOCATION", "PRODUCT_TYPE"] if c in scatter_df.columns
-        ]
+hover_cols = [
+    c for c in ["SKU", "LOCATION", "PRODUCT_TYPE"] if c in scatter_df.columns
+]
 
-        # Student-enhanced: use qualitative color palette and clear labels
-        scatter_fig = px.scatter(
-            scatter_df,
-            x="COSTS",
-            y="REVENUE_GENERATED",
-            color=color_choice,
-            size="NUMBER_OF_PRODUCTS_SOLD",
-            hover_data=hover_cols,
-            labels={"COSTS": "Costs (USD)", "REVENUE_GENERATED": "Revenue (USD)"},
-            title="Costs vs Revenue with Number Sold as Point Size",
-            color_discrete_sequence=px.colors.qualitative.Set1,
-        )
+# Student-enhanced: use qualitative color palette and clear labels
+scatter_fig = px.scatter(
+    scatter_df,
+    x="COSTS",
+    y="REVENUE_GENERATED",
+    color=color_choice,
+    size="NUMBER_OF_PRODUCTS_SOLD",
+    hover_data=hover_cols,
+    labels={"COSTS": "Costs (USD)", "REVENUE_GENERATED": "Revenue (USD)"},
+    title="Costs vs Revenue with Number Sold as Point Size",
+    color_discrete_sequence=px.colors.qualitative.Set1,
+)
 
-        scatter_fig.update_layout(
-            xaxis_title="Costs (USD)",
-            yaxis_title="Revenue (USD)",
-            margin=dict(t=80, b=40),
-        )
+scatter_fig.update_layout(
+    xaxis_title="Costs (USD)",
+    yaxis_title="Revenue (USD)",
+    margin=dict(t=80, b=40),
+)
 
-        st.plotly_chart(scatter_fig, use_container_width=True)
+st.plotly_chart(scatter_fig, use_container_width=True)
 
-        # Student-enhanced: caption to help business users interpret the chart
-        st.caption(
-            "Each bubble shows one record in the filtered dataset. "
-            "Higher points indicate higher revenue; larger bubbles represent more units sold."
-        )
+# Student-enhanced: caption to help business users interpret the chart
+st.caption(
+    "Each bubble shows one record in the filtered dataset. "
+    "Higher points indicate higher revenue; larger bubbles represent more units sold."
+)
 
 
 # ===========================
 # TAB 4: Quality & Segments (Heatmap + Donut)
 # ===========================
-    st.subheader("Defect Rates by Location and Transport Mode")
+st.subheader("Defect Rates by Location and Transport Mode")
 
-    heat = (
-        filtered_df.groupby(["LOCATION", "TRANSPORTATION_MODES"])["DEFECT_RATES"]
-        .mean()
-        .reset_index()
-    )
-    heat_pivot = heat.pivot(
-        index="LOCATION",
-        columns="TRANSPORTATION_MODES",
-        values="DEFECT_RATES",
-    )
+heat = (
+    filtered_df.groupby(["LOCATION", "TRANSPORTATION_MODES"])["DEFECT_RATES"]
+    .mean()
+    .reset_index()
+)
+heat_pivot = heat.pivot(
+    index="LOCATION",
+    columns="TRANSPORTATION_MODES",
+    values="DEFECT_RATES",
+)
 
-    # Student-enhanced: use a strong red color scale and meaningful title
-    heat_fig = px.imshow(
-        heat_pivot,
-        labels=dict(
-            x="Transportation Modes",
-            y="Location",
-            color="Avg Defect Rate",
-        ),
-        title="Average Defect Rates by Location and Transport (Student-enhanced)",
-        color_continuous_scale="Reds",
-        aspect="auto",
-    )
+# Student-enhanced: use a strong red color scale and meaningful title
+heat_fig = px.imshow(
+    heat_pivot,
+    labels=dict(
+        x="Transportation Modes",
+        y="Location",
+        color="Avg Defect Rate",
+),
+    title="Average Defect Rates by Location and Transport (Student-enhanced)",
+    color_continuous_scale="Reds",
+    aspect="auto",
+)
 
-    # Student-enhanced: display defect rate percentages inside the cells
-    heat_fig.update_traces(
-        text=(heat_pivot.values * 100).round(1),
-        texttemplate="%{text}%",
-        textfont=dict(size=10),
-    )
+# Student-enhanced: display defect rate percentages inside the cells
+heat_fig.update_traces(
+    text=(heat_pivot.values * 100).round(1),
+    texttemplate="%{text}%",
+    textfont=dict(size=10),
+)
 
-    heat_fig.update_layout(
-        margin=dict(t=80, b=40),
-    )
+heat_fig.update_layout(
+    margin=dict(t=80, b=40),
+)
 
-    st.plotly_chart(heat_fig, use_container_width=True)
+st.plotly_chart(heat_fig, use_container_width=True)
 
-    # Student-enhanced: explanatory caption for business users
-    st.caption(
-        "Darker cells indicate higher defect rates. Values are displayed as percentages."
-    )
+# Student-enhanced: explanatory caption for business users
+st.caption(
+    "Darker cells indicate higher defect rates. Values are displayed as percentages."
+)
 
-    st.markdown("---")
+st.markdown("---")
 
-    st.subheader("Category Distribution (Donut Chart)")
+st.subheader("Category Distribution (Donut Chart)")
 
-    # Student-enhanced: allow selecting donut category inside the tab
-    donut_category = st.selectbox(
+# Student-enhanced: allow selecting donut category inside the tab
+donut_category = st.selectbox(
         "Select category for donut chart",
         options=["INSPECTION_RESULTS", "CUSTOMER_DEMOGRAPHICS"],
         index=["INSPECTION_RESULTS", "CUSTOMER_DEMOGRAPHICS"].index(
             donut_category_initial
-        )
-        if donut_category_initial in ["INSPECTION_RESULTS", "CUSTOMER_DEMOGRAPHICS"]
+    )
+    if donut_category_initial in ["INSPECTION_RESULTS", "CUSTOMER_DEMOGRAPHICS"]
         else 0,
         key="donut_category_tab",
     )
 
-    donut_counts = (
-        filtered_df[donut_category]
-        .value_counts()
-        .reset_index(name="COUNT")
-        .rename(columns={"index": donut_category})
-    )
+donut_counts = (
+    filtered_df[donut_category]
+    .value_counts()
+    .reset_index(name="COUNT")
+    .rename(columns={"index": donut_category})
+)
 
-    # Student-enhanced: pastel colors, inside labels, and custom hover text
-    donut_fig = px.pie(
-        donut_counts,
-        names=donut_category,
-        values="COUNT",
-        hole=0.5,
-        title=f"Distribution of {donut_category}",
-        color=donut_category,
-        color_discrete_sequence=px.colors.qualitative.Pastel,
-    )
+# Student-enhanced: pastel colors, inside labels, and custom hover text
+donut_fig = px.pie(
+    donut_counts,
+    names=donut_category,
+    values="COUNT",
+    hole=0.5,
+    title=f"Distribution of {donut_category}",
+    color=donut_category,
+    color_discrete_sequence=px.colors.qualitative.Pastel,
+)
 
-    donut_fig.update_traces(
-        textinfo="percent+label",
-        textposition="inside",
-        hovertemplate=f"{donut_category}: %{{label}}<br>Count: %{{value}}<extra></extra>",
-    )
+donut_fig.update_traces(
+    textinfo="percent+label",
+    textposition="inside",
+    hovertemplate=f"{donut_category}: %{{label}}<br>Count: %{{value}}<extra></extra>",
+)
 
-    donut_fig.update_layout(
-        margin=dict(t=80, b=40),
-    )
+donut_fig.update_layout(
+    margin=dict(t=80, b=40),
+)
 
-    st.plotly_chart(donut_fig, use_container_width=True)
+st.plotly_chart(donut_fig, use_container_width=True)
 
-    # Student-enhanced: caption linking the donut back to business questions
-    st.caption(
-        "Use this donut chart to understand how records are distributed across "
-        "inspection outcomes or customer segments."
-    )
+# Student-enhanced: caption linking the donut back to business questions
+st.caption(
+    "Use this donut chart to understand how records are distributed across "
+    "inspection outcomes or customer segments."
+)
 
 
