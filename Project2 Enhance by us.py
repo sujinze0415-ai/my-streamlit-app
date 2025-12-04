@@ -142,16 +142,7 @@ st.markdown(
 # -------------------------------
 # 4. Tabbed layout
 # -------------------------------
-# Student-enhanced: use tabs to organize the dashboard into logical sections
-overview_tab, product_tab, performance_tab, quality_tab = st.tabs(
-    ["📊 Overview", "🧷 Product View", "⚙️ Performance", "✅ Quality & Segments"]
-)
-
-# ===========================
-# TAB 1: Overview (KPI + Bar)
-# ===========================
-with overview_tab:
-    st.subheader("Key Performance Indicators")
+st.subheader("Key Performance Indicators")
 
     total_revenue = filtered_df["REVENUE_GENERATED"].sum()
     total_costs = filtered_df["COSTS"].sum()
@@ -221,46 +212,9 @@ with overview_tab:
     )
 
     st.plotly_chart(bar_fig, use_container_width=True)
-
-
-# ===========================
-# TAB 2: Product View
-# ===========================
-with product_tab:
-    st.subheader("Product Mix and Revenue Focus")
-
-    # Student-enhanced: short descriptive text to guide interpretation
-    st.write(
-        "This view helps us compare how different product types contribute to overall performance."
-    )
-
-    # Student-enhanced: reuse bar chart here as a dedicated product view
-    product_bar_fig = px.bar(
-        bar_data,
-        x="PRODUCT_TYPE",
-        y="VALUE",
-        color="PRODUCT_TYPE",
-        color_discrete_sequence=px.colors.qualitative.Set2,
-        labels={"VALUE": metric_option},
-        title=f"{metric_option} by Product Type (same as Overview, shown separately here)",
-    )
-    product_bar_fig.update_traces(
-        text=bar_data["VALUE"].round(0),
-        textposition="outside",
-    )
-    product_bar_fig.update_layout(
-        xaxis_tickangle=-30,
-        margin=dict(t=60, b=80),
-        showlegend=False,
-    )
-
-    st.plotly_chart(product_bar_fig, use_container_width=True)
-
-
 # ===========================
 # TAB 3: Performance (Scatter)
 # ===========================
-with performance_tab:
     st.subheader("Cost vs Revenue by Product / Location")
 
     scatter_df = filtered_df.copy()
@@ -314,7 +268,6 @@ with performance_tab:
 # ===========================
 # TAB 4: Quality & Segments (Heatmap + Donut)
 # ===========================
-with quality_tab:
     st.subheader("Defect Rates by Location and Transport Mode")
 
     heat = (
