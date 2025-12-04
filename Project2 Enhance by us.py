@@ -177,15 +177,15 @@ metric_option = st.selectbox(
 
 grouped = filtered_df.groupby("PRODUCT_TYPE")
 
-    if metric_option == "Total Revenue":
+if metric_option == "Total Revenue":
         bar_data = grouped["REVENUE_GENERATED"].sum().reset_index(name="VALUE")
-    elif metric_option == "Total Costs":
+elif metric_option == "Total Costs":
         bar_data = grouped["COSTS"].sum().reset_index(name="VALUE")
-    else:
-        bar_data = (
-            grouped["REVENUE_GENERATED"].sum()
-            - grouped["COSTS"].sum()
-        ).reset_index(name="VALUE")
+else:
+    bar_data = (
+        grouped["REVENUE_GENERATED"].sum()
+        - grouped["COSTS"].sum()
+    ).reset_index(name="VALUE")
 
 # Student-enhanced: color by product and use a qualitative palette
 bar_fig = px.bar(
