@@ -226,12 +226,12 @@ if scatter_df.empty:
 )
 else:
 # Student-enhanced: allow user to choose how to color points
-color_choice = st.selectbox(
+    color_choice = st.selectbox(
     "Color points by",
     options=["PRODUCT_TYPE", "LOCATION"],
     index=0,
     key="scatter_color",
-)
+    )
 
 hover_cols = [
     c for c in ["SKU", "LOCATION", "PRODUCT_TYPE"] if c in scatter_df.columns
