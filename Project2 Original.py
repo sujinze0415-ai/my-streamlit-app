@@ -5,14 +5,10 @@ import plotly.express as px
 # -----------------------
 # 1. Start dashboard app
 # -----------------------
-# Student-enhanced: use wide layout and a more expressive title with emoji
 st.set_page_config(page_title="Supply Chain Dashboard", layout="wide")
 
-# Student-enhanced: fun title and caption instead of a plain title
 st.title("📦 Supply Chain Performance Dashboard")
-st.caption(
-    "Explore key metrics, product performance, and quality patterns across the supply chain."
-)
+st.caption("Explore key metrics, product performance, and quality patterns across the supply chain.")
 
 # -----------------------
 # 2. Load and clean data
@@ -20,17 +16,10 @@ st.caption(
 @st.cache_data
 def load_data(path: str) -> pd.DataFrame:
     df = pd.read_csv(path)
-
-    # Drop duplicate rows
     df = df.drop_duplicates()
 
-    # Convert key numeric columns to numeric types
     numeric_cols = [
-        "PRICE",
-        "REVENUE_GENERATED",
-        "COSTS",
-        "DEFECT_RATES",
-        "NUMBER_OF_PRODUCTS_SOLD",
+        "PRICE", "REVENUE_GENERATED", "COSTS", "DEFECT_RATES", "NUMBER_OF_PRODUCTS_SOLD",
     ]
     for col in numeric_cols:
         if col in df.columns:
@@ -38,108 +27,63 @@ def load_data(path: str) -> pd.DataFrame:
 
     return df
 
-
 df = load_data("supply_chain_data_cleaned.csv")
 
 required_cols = [
-    "PRODUCT_TYPE",
-    "LOCATION",
-    "TRANSPORTATION_MODES",
-    "INSPECTION_RESULTS",
-    "CUSTOMER_DEMOGRAPHICS",
-    "PRICE",
-    "REVENUE_GENERATED",
-    "COSTS",
-    "DEFECT_RATES",
-    "NUMBER_OF_PRODUCTS_SOLD",
+    "PRODUCT_TYPE", "LOCATION", "TRANSPORTATION_MODES", "INSPECTION_RESULTS",
+    "CUSTOMER_DEMOGRAPHICS", "PRICE", "REVENUE_GENERATED", "COSTS",
+    "DEFECT_RATES", "NUMBER_OF_PRODUCTS_SOLD",
 ]
 missing = [c for c in required_cols if c not in df.columns]
 if missing:
     st.error(f"Missing required columns in CSV: {missing}")
     st.stop()
 
-
 # -------------------------------
-# 3. Create global filters
+# 3. Global filters
 # -------------------------------
-# Student-enhanced: sidebar header with icon and friendly text
 st.sidebar.header("🔍 Global Filters")
+st.sidebar.info("Use these filters to slice the entire dashboard. All visuals update together.")
 
-# Student-enhanced: small sidebar info card explaining the filters
-st.sidebar.info(
-    "Use these filters to slice the entire dashboard.\n\n"
-    "All KPIs and visualizations are linked to the same filtered data."
-)
-
-# PRODUCT_TYPE filter
 product_options = sorted(df["PRODUCT_TYPE"].dropna().unique())
-selected_products = st.sidebar.multiselect(
-    "Product Type", options=product_options, default=product_options
-)
+selected_products = st.sidebar.multiselect("Product Type", product_options, product_options)
 
-# LOCATION filter
 location_options = sorted(df["LOCATION"].dropna().unique())
-selected_locations = st.sidebar.multiselect(
-    "Location", options=location_options, default=location_options
-)
+selected_locations = st.sidebar.multiselect("Location", location_options, location_options)
 
-# TRANSPORTATION_MODES filter
 transport_options = sorted(df["TRANSPORTATION_MODES"].dropna().unique())
-selected_transports = st.sidebar.multiselect(
-    "Transportation Modes", options=transport_options, default=transport_options
-)
+selected_transports = st.sidebar.multiselect("Transportation Modes", transport_options, transport_options)
 
-# INSPECTION_RESULTS filter
 inspect_options = sorted(df["INSPECTION_RESULTS"].dropna().unique())
-selected_inspections = st.sidebar.multiselect(
-    "Inspection Results", options=inspect_options, default=inspect_options
-)
+selected_inspections = st.sidebar.multiselect("Inspection Results", inspect_options, inspect_options)
 
-# Price range slider
 min_price = float(df["PRICE"].min())
 max_price = float(df["PRICE"].max())
 price_min, price_max = st.sidebar.slider(
-    "Price range",
-    min_value=min_price,
-    max_value=max_price,
-    value=(min_price, max_price),
+    "Price range", min_value=min_price, max_value=max_price, value=(min_price, max_price)
 )
 
-# Minimum units sold (used in scatter plot)
-min_sold = st.sidebar.number_input(
-    "Minimum NUMBER_OF_PRODUCTS_SOLD (for scatter plot)",
-    min_value=0,
-    value=0,
-)
+min_sold = st.sidebar.number_input("Min NUMBER_OF_PRODUCTS_SOLD (scatter)", min_value=0, value=0)
 
-# Student-enhanced: default donut category selection in the sidebar
 donut_category_initial = st.sidebar.selectbox(
-    "Default donut category",
-    options=["INSPECTION_RESULTS", "CUSTOMER_DEMOGRAPHICS"],
+    "Default donut category", ["INSPECTION_RESULTS", "CUSTOMER_DEMOGRAPHICS"]
 )
 
-# Apply all filters to create a single filtered_df
 filtered_df = df.copy()
 filtered_df = filtered_df[filtered_df["PRODUCT_TYPE"].isin(selected_products)]
 filtered_df = filtered_df[filtered_df["LOCATION"].isin(selected_locations)]
 filtered_df = filtered_df[filtered_df["TRANSPORTATION_MODES"].isin(selected_transports)]
 filtered_df = filtered_df[filtered_df["INSPECTION_RESULTS"].isin(selected_inspections)]
-filtered_df = filtered_df[
-    (filtered_df["PRICE"] >= price_min) & (filtered_df["PRICE"] <= price_max)
-]
+filtered_df = filtered_df[(filtered_df["PRICE"] >= price_min) & (filtered_df["PRICE"] <= price_max)]
 
-# If no rows remain, stop execution
 if filtered_df.empty:
-    st.warning("No data after applying filters. Please relax the filter settings.")
+    st.warning("No data after applying filters. Please adjust filters.")
     st.stop()
 
-# Student-enhanced: show how many records are currently displayed
-st.markdown(
-    f"✅ Showing **{len(filtered_df):,}** records after applying current filters."
-)
+st.markdown(f"✅ Showing **{len(filtered_df):,}** filtered records.")
 
 # -------------------------------
-# 4. KPI section (full width)
+# 4. KPIs
 # -------------------------------
 st.subheader("Key Performance Indicators")
 
@@ -148,38 +92,26 @@ total_costs = filtered_df["COSTS"].sum()
 total_profit = total_revenue - total_costs
 avg_defect_rate = filtered_df["DEFECT_RATES"].mean()
 
-kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+k1, k2, k3, k4 = st.columns(4)
+k1.metric("Total Revenue 💰", f"${total_revenue:,.0f}")
+k2.metric("Total Costs 💸", f"${total_costs:,.0f}")
+k3.metric("Total Profit 📈", f"${total_profit:,.0f}")
+k4.metric("Avg Defect Rate ⚠️", f"{avg_defect_rate*100:.2f}%")
 
-# Student-enhanced: add emojis and clearer labels for KPIs
-kpi1.metric("Total Revenue (USD) 💰", f"${total_revenue:,.0f}")
-kpi2.metric("Total Costs (USD) 💸", f"${total_costs:,.0f}")
-kpi3.metric("Total Profit (USD) 📈", f"${total_profit:,.0f}")
-kpi4.metric("Average Defect Rate ⚠️", f"{avg_defect_rate * 100:.2f}%")
-
-# Student-enhanced: helpful caption tied to filter behavior
-st.caption(
-    "These KPIs are calculated from the filtered dataset and update when you change the filters on the left."
-)
-
+st.caption("KPIs update dynamically based on filters.")
 st.markdown("---")
 
-# ===========================
-# 5. Two-row dashboard layout
-# ===========================
-st.subheader("Visual Overview")
+# ===============================
+# 5. Dashboard visual layout
+# ===============================
+# -------- Row 1: Bar + Scatter --------
+col1, col2 = st.columns(2)
 
-# -------------------------------
-# Row 1: Bar chart (left) + Scatter (right)
-# -------------------------------
-row1_col1, row1_col2 = st.columns(2)
-
-with row1_col1:
-    st.markdown("### Product Performance Overview (Bar)")
-
+# BAR CHART
+with col1:
+    st.markdown("### Product Performance (Bar Chart)")
     metric_option = st.selectbox(
-        "Select metric for bar chart",
-        options=["Total Revenue", "Total Costs", "Total Profit"],
-        key="bar_metric",
+        "Metric", ["Total Revenue", "Total Costs", "Total Profit"], key="bar_metric"
     )
 
     grouped = filtered_df.groupby("PRODUCT_TYPE")
@@ -190,148 +122,86 @@ with row1_col1:
         bar_data = grouped["COSTS"].sum().reset_index(name="VALUE")
     else:
         bar_data = (
-            grouped["REVENUE_GENERATED"].sum()
-            - grouped["COSTS"].sum()
+            grouped["REVENUE_GENERATED"].sum() - grouped["COSTS"].sum()
         ).reset_index(name="VALUE")
 
-    # Student-enhanced: color by product and use a qualitative palette
     bar_fig = px.bar(
         bar_data,
         x="PRODUCT_TYPE",
         y="VALUE",
         color="PRODUCT_TYPE",
         color_discrete_sequence=px.colors.qualitative.Set2,
-        labels={"VALUE": metric_option},
-        title=f"{metric_option} by Product Type (Student-enhanced)",
+        title="Product Performance",
     )
 
-    # Student-enhanced: show numeric values on top of bars
-    bar_fig.update_traces(
-        text=bar_data["VALUE"].round(0),
-        textposition="outside",
-    )
-
-    # Student-enhanced: rotate x labels and adjust margins for readability
-    bar_fig.update_layout(
-        xaxis_tickangle=-30,
-        margin=dict(t=60, b=80),
-        showlegend=False,
-    )
+    bar_fig.update_traces(text=bar_data["VALUE"].round(0), textposition="outside")
+    bar_fig.update_layout(height=300, margin=dict(t=40, b=40), showlegend=False)
 
     st.plotly_chart(bar_fig, use_container_width=True)
 
-with row1_col2:
-    st.markdown("### Cost vs Revenue by Product / Location (Scatter)")
+# SCATTER
+with col2:
+    st.markdown("### Cost vs Revenue (Scatter)")
 
-    scatter_df = filtered_df.copy()
-    scatter_df = scatter_df[scatter_df["NUMBER_OF_PRODUCTS_SOLD"] >= min_sold]
+    scatter_df = filtered_df[filtered_df["NUMBER_OF_PRODUCTS_SOLD"] >= min_sold]
 
     if scatter_df.empty:
-        st.info(
-            "No data for the scatter plot under the current filters and minimum units sold."
-        )
+        st.info("No scatter data under current filters.")
     else:
-        # Student-enhanced: allow user to choose how to color points
-        color_choice = st.selectbox(
-            "Color points by",
-            options=["PRODUCT_TYPE", "LOCATION"],
-            index=0,
-            key="scatter_color",
-        )
+        color_choice = st.selectbox("Color by", ["PRODUCT_TYPE", "LOCATION"], key="scatter_color")
 
-        hover_cols = [
-            c for c in ["SKU", "LOCATION", "PRODUCT_TYPE"] if c in scatter_df.columns
-        ]
-
-        # Student-enhanced: use qualitative color palette and clear labels
         scatter_fig = px.scatter(
             scatter_df,
             x="COSTS",
             y="REVENUE_GENERATED",
             color=color_choice,
             size="NUMBER_OF_PRODUCTS_SOLD",
-            hover_data=hover_cols,
             labels={"COSTS": "Costs (USD)", "REVENUE_GENERATED": "Revenue (USD)"},
-            title="Costs vs Revenue with Number Sold as Point Size",
             color_discrete_sequence=px.colors.qualitative.Set1,
+            title="Costs vs Revenue",
         )
 
-        scatter_fig.update_layout(
-            xaxis_title="Costs (USD)",
-            yaxis_title="Revenue (USD)",
-            margin=dict(t=80, b=40),
-        )
-
+        scatter_fig.update_layout(height=300, margin=dict(t=40, b=40))
         st.plotly_chart(scatter_fig, use_container_width=True)
 
-        # Student-enhanced: caption to help business users interpret the chart
-        st.caption(
-            "Each bubble shows one record in the filtered dataset. "
-            "Higher points indicate higher revenue; larger bubbles represent more units sold."
-        )
+# -------- Row 2: Heatmap + Donut --------
+col3, col4 = st.columns(2)
 
-# -------------------------------
-# Row 2: Heatmap (left) + Donut (right)
-# -------------------------------
-row2_col1, row2_col2 = st.columns(2)
-
-with row2_col1:
-    st.markdown("### Defect Rates by Location and Transport Mode (Heatmap)")
+# HEATMAP
+with col3:
+    st.markdown("### Defect Rate Heatmap")
 
     heat = (
         filtered_df.groupby(["LOCATION", "TRANSPORTATION_MODES"])["DEFECT_RATES"]
         .mean()
         .reset_index()
     )
-    heat_pivot = heat.pivot(
-        index="LOCATION",
-        columns="TRANSPORTATION_MODES",
-        values="DEFECT_RATES",
-    )
+    heat_pivot = heat.pivot(index="LOCATION", columns="TRANSPORTATION_MODES", values="DEFECT_RATES")
 
-    # Student-enhanced: use a strong red color scale and meaningful title
     heat_fig = px.imshow(
         heat_pivot,
-        labels=dict(
-            x="Transportation Modes",
-            y="Location",
-            color="Avg Defect Rate",
-        ),
-        title="Average Defect Rates by Location and Transport (Student-enhanced)",
+        labels=dict(x="Transport Mode", y="Location", color="Avg Defect Rate"),
         color_continuous_scale="Reds",
-        aspect="auto",
+        title="Defect Rate by Location & Transport",
     )
 
-    # Student-enhanced: display defect rate percentages inside the cells
     heat_fig.update_traces(
         text=(heat_pivot.values * 100).round(1),
         texttemplate="%{text}%",
         textfont=dict(size=10),
     )
-
-    heat_fig.update_layout(
-        margin=dict(t=80, b=40),
-    )
+    heat_fig.update_layout(height=300, margin=dict(t=40, b=40))
 
     st.plotly_chart(heat_fig, use_container_width=True)
 
-    # Student-enhanced: explanatory caption for business users
-    st.caption(
-        "Darker cells indicate higher defect rates. Values are displayed as percentages."
-    )
+# DONUT
+with col4:
+    st.markdown("### Category Distribution (Donut)")
 
-with row2_col2:
-    st.markdown("### Category Distribution (Donut Chart)")
-
-    # Student-enhanced: allow selecting donut category inside the panel
     donut_category = st.selectbox(
-        "Select category for donut chart",
-        options=["INSPECTION_RESULTS", "CUSTOMER_DEMOGRAPHICS"],
-        index=["INSPECTION_RESULTS", "CUSTOMER_DEMOGRAPHICS"].index(
-            donut_category_initial
-        )
-        if donut_category_initial in ["INSPECTION_RESULTS", "CUSTOMER_DEMOGRAPHICS"]
-        else 0,
+        "Category",
+        ["INSPECTION_RESULTS", "CUSTOMER_DEMOGRAPHICS"],
+        index=["INSPECTION_RESULTS", "CUSTOMER_DEMOGRAPHICS"].index(donut_category_initial),
         key="donut_category_tab",
     )
 
@@ -342,31 +212,16 @@ with row2_col2:
         .rename(columns={"index": donut_category})
     )
 
-    # Student-enhanced: pastel colors, inside labels, and custom hover text
     donut_fig = px.pie(
         donut_counts,
         names=donut_category,
         values="COUNT",
         hole=0.5,
-        title=f"Distribution of {donut_category}",
-        color=donut_category,
+        title=f"{donut_category} Distribution",
         color_discrete_sequence=px.colors.qualitative.Pastel,
     )
 
-    donut_fig.update_traces(
-        textinfo="percent+label",
-        textposition="inside",
-        hovertemplate=f"{donut_category}: %{{label}}<br>Count: %{{value}}<extra></extra>",
-    )
-
-    donut_fig.update_layout(
-        margin=dict(t=80, b=40),
-    )
+    donut_fig.update_layout(height=300, margin=dict(t=40, b=40))
+    donut_fig.update_traces(textinfo="percent+label", textposition="inside")
 
     st.plotly_chart(donut_fig, use_container_width=True)
-
-    # Student-enhanced: caption linking the donut back to business questions
-    st.caption(
-        "Use this donut chart to understand how records are distributed across "
-        "inspection outcomes or customer segments."
-    )
